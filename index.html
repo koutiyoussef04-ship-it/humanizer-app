@@ -1055,19 +1055,27 @@ function HumanizerDashboard() {
                 OR Promise<{ text:string, aiPct:number }> — text + AI% to show in the bar
   ══════════════════════════════════════════════════════════ */
   const handleTransform = useCallback(async (text, level) => {
-    // Add a slight delay for "Processing" effect
-    await new Promise(r => setTimeout(r, 1500));
-    
-    const levels = {
-      1: { burst: 0.2, entropy: 0.3 },
-      10: { burst: 0.95, entropy: 0.98 }
-    };
-    // Logic to vary text
-    const transformed = text.replace(/\b(furthermore|moreover|consequently)\b/gi, "and honestly")
-                            .replace(/\. /g, level > 5 ? "... " : ". ");
-    return { 
-      text: transformed, 
-      aiPct: Math.max(0, 100 - (level * 10)) 
+    // Simulate heavy processing for the "Aura" effect
+    await new Promise(r => setTimeout(r, 2200));
+    const intensity = level / 10;
+
+    let humanized = text
+      .replace(/\b(Furthermore|Moreover|In addition)\b/g, () => (Math.random() > 0.5 ? "Also," : "Plus,"))
+      .replace(/\b(Consequently|As a result)\b/g, "So basically")
+      .replace(/\. /g, () => (Math.random() > 0.8 * intensity ? "... " : ". "))
+      .replace(/\butilize\b/g, "use")
+      .replace(/\bcomprehensive\b/g, "full")
+      .replace(/\bessential\b/g, "key");
+
+    const sentences = humanized.split('. ');
+    const variated = sentences.map((s, i) => {
+      if (i % 2 === 0 && intensity > 0.6) return s.toLowerCase();
+      return s;
+    }).join('. ');
+
+    return {
+      text: variated,
+      aiPct: Math.floor(Math.random() * (25 - level))
     };
   }, []);
 
@@ -1079,16 +1087,28 @@ function HumanizerDashboard() {
                 OR Promise<{ score, breakdown:{ perplexity, burstiness, patternMatch } }>
   ══════════════════════════════════════════════════════════ */
   const handleAiScan = useCallback(async (text) => {
-    await new Promise(r => setTimeout(r, 2000));
-    
-    const isHumanized = text.includes("...") || text.includes("honestly");
-    
+    await new Promise(r => setTimeout(r, 1500));
+    const words = text.trim().split(/\s+/);
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+
+    const uniqueWords = new Set(words.map(w => w.toLowerCase()));
+    const lexicalDensity = uniqueWords.size / words.length;
+
+    const lengths = sentences.map(s => s.split(' ').length);
+    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+    const variance = lengths.reduce((a, b) => a + Math.pow(b - avgLength, 2), 0) / lengths.length;
+
+    let score = 0;
+    if (lexicalDensity < 0.5) score += 50;
+    if (variance < 10) score += 45;
+    const finalScore = Math.min(99, score + Math.floor(Math.random() * 10));
+
     return {
-      score: isHumanized ? Math.floor(Math.random() * 5) : 94,
+      score: finalScore,
       breakdown: {
-        perplexity: isHumanized ? 98 : 25,
-        burstiness: isHumanized ? 96 : 18,
-        patternMatch: isHumanized ? 2 : 99
+        perplexity: Math.round(lexicalDensity * 100),
+        burstiness: Math.round(Math.min(100, variance * 5)),
+        patternMatch: finalScore > 70 ? 92 : 12
       }
     };
   }, []);
