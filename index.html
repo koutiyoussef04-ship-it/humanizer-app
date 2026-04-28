@@ -1055,49 +1055,16 @@ function HumanizerDashboard() {
                 OR Promise<{ text:string, aiPct:number }> — text + AI% to show in the bar
   ══════════════════════════════════════════════════════════ */
   const handleTransform = useCallback(async (text, level) => {
-    const OPENAI_API_KEY = "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";
-
-    const intensityDesc = level <= 3 ? "lightly" : level <= 6 ? "moderately" : level <= 8 ? "heavily" : "completely";
-
-    const prompt = `You are an expert at making AI-generated text sound natural and human-written so it bypasses AI detectors like GPTZero.
-
-Rewrite the following text ${intensityDesc} so it:
-- Varies sentence lengths dramatically (mix very short and longer sentences)
-- Uses natural, conversational transitions instead of formal ones
-- Adds subtle imperfections and personal tone
-- Avoids repetitive sentence structures
-- Uses contractions naturally (it's, that's, don't, etc.)
-- Sounds like a real person wrote it, not an AI
-
-Return ONLY the rewritten text, nothing else.
-
-Text to rewrite:
-${text}`;
-
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("/api/humanize", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": \`Bearer \${OPENAI_API_KEY}\`
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.85,
-          max_tokens: 1000
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, level })
       });
-
       const data = await response.json();
-      const humanized = data.choices?.[0]?.message?.content?.trim() || text;
-
-      return {
-        text: humanized,
-        aiPct: Math.max(0, 30 - (level * 3))
-      };
+      return { text: data.text || text, aiPct: data.aiPct ?? null };
     } catch (err) {
-      console.error("OpenAI error:", err);
+      console.error("Humanize error:", err);
       return { text, aiPct: null };
     }
   }, []);
@@ -1109,51 +1076,24 @@ ${text}`;
      Returns  : Promise<number>  — AI probability score 0-100
                 OR Promise<{ score, breakdown:{ perplexity, burstiness, patternMatch } }>
   ══════════════════════════════════════════════════════════ */
-  const handleAiScan = useCallback(async (text) => {
-    const OPENAI_API_KEY = "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";
-
-    const prompt = `You are an AI detection expert. Analyse the following text and estimate the probability it was written by an AI.
-
-Return ONLY a valid JSON object in this exact format, nothing else:
-{
-  "score": <number 0-100, where 100 = definitely AI>,
-  "perplexity": <number 0-100, how predictable the word choices are>,
-  "burstiness": <number 0-100, how varied the sentence lengths are, higher = more human>,
-  "patternMatch": <number 0-100, how much it matches known AI patterns>
-}
-
-Text to analyse:
-${text}`;
-
+const handleAiScan = useCallback(async (text) => {
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("/api/detect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": \`Bearer \${OPENAI_API_KEY}\`
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.2,
-          max_tokens: 150
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
       });
-
       const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content?.trim() || "{}";
-      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-
       return {
-        score: parsed.score ?? 50,
+        score: data.score ?? 50,
         breakdown: {
-          perplexity:   parsed.perplexity   ?? 50,
-          burstiness:   parsed.burstiness   ?? 50,
-          patternMatch: parsed.patternMatch  ?? 50
+          perplexity:   data.breakdown?.perplexity   ?? 50,
+          burstiness:   data.breakdown?.burstiness   ?? 50,
+          patternMatch: data.breakdown?.patternMatch  ?? 50
         }
       };
     } catch (err) {
-      console.error("AI scan error:", err);
+      console.error("Detect error:", err);
       return { score: 50, breakdown: { perplexity: 50, burstiness: 50, patternMatch: 50 } };
     }
   }, []);
