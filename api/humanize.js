@@ -6,7 +6,6 @@ export default async function handler(req, res) {
 
   try {
     const { text, level } = req.body;
-    const intensityDesc = level <= 3 ? "lightly" : level <= 6 ? "moderately" : level <= 8 ? "heavily" : "completely";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -16,12 +15,36 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: [{
-          role: "user",
-          content: `You are an expert at making AI-generated text sound natural and human-written so it bypasses AI detectors like GPTZero. Rewrite the following text ${intensityDesc} so it varies sentence lengths dramatically, uses natural conversational transitions, adds subtle imperfections and personal tone, uses contractions naturally, and sounds like a real person wrote it. Return ONLY the rewritten text, nothing else.\n\nText to rewrite:\n${text}`
-        }],
-        temperature: 0.85,
-        max_tokens: 1000
+        messages: [
+          {
+            role: "system",
+            content: `You are a human student rewriting notes in your own words. You write casually, make occasional minor errors, vary your sentence lengths a lot, and sound genuinely human. You never sound like an AI. You use contractions, informal phrasing, and personal opinions occasionally.`
+          },
+          {
+            role: "user",
+            content: `Rewrite the following text so it sounds completely human-written and passes AI detectors like GPTZero. 
+
+Rules:
+- Mix very short sentences (3-5 words) with longer ones randomly
+- Use contractions everywhere (it's, don't, that's, I've, you'll)
+- Add occasional filler words (honestly, basically, kind of, pretty much)
+- Break formal transitions (Furthermore → Plus, Moreover → Also)
+- Vary punctuation — use dashes, ellipses occasionally
+- Add a personal touch or opinion once or twice
+- Never use: "Furthermore", "Moreover", "In conclusion", "It is important to note"
+- Make it sound like a smart student wrote it, not an AI
+- Keep the same meaning and information
+
+Return ONLY the rewritten text. No explanations.
+
+Text:
+${text}`
+          }
+        ],
+        temperature: 0.95,
+        presence_penalty: 0.6,
+        frequency_penalty: 0.5,
+        max_tokens: 1500
       })
     });
 
