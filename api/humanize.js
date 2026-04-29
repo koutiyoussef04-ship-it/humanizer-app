@@ -7,8 +7,7 @@ export default async function handler(req, res) {
   try {
     const { text, level } = req.body;
 
-    // PASS 1: Rewrite as human student
-    const pass1 = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -19,107 +18,93 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "system",
-            content: `You are a college student who writes casually and imperfectly. You sometimes start sentences with "And" or "But". You use contractions always. You occasionally make a point feel personal. Your writing has natural rhythm — not too polished.`
+            content: `You are a skilled human writer who rewrites AI-generated text to sound completely natural and human. You have a distinct voice — slightly opinionated, grounded, and real. You never sound like a language model.`
           },
           {
             role: "user",
-            content: `Rewrite this text as if YOU are a real college student writing it for the first time. Make it sound genuinely human:
-- Use "And" or "But" to start some sentences
-- Mix super short sentences with longer ones randomly
-- Add "honestly", "basically", "I mean", "kind of", "pretty much" occasionally  
-- Use contractions everywhere: it's, don't, that's, won't, can't, I've
-- Remove ALL formal transitions: no "Furthermore", "Moreover", "In conclusion", "Subsequently"
-- Add one personal observation or opinion
-- Vary punctuation — use a dash here and there, maybe "..." once
-- Deliberately make one sentence feel incomplete or casual
-- NEVER sound polished or academic
+            content: `Rewrite the following text so it passes AI detectors like GPTZero completely. Follow these rules strictly:
 
-Return ONLY the rewritten text.
+1. VARY SENTENCE DYNAMICS: Mix short punchy sentences (3-6 words) with longer complex ones. Never have 3 sentences of the same length in a row. Create natural burstiness.
 
-Text: ${text}`
+2. INJECT PERSONALITY: Use a specific perspective. Add idioms, subtle metaphors, or imperfect conversational transitions like "The thing is,", "Now here's where it gets interesting,", "And that's exactly the point —", "Funny enough,", "Which, when you think about it,".
+
+3. AVOID AI-ISMS: NEVER use these words: tapestry, delve, unlock, comprehensive, shaping, furthermore, moreover, subsequently, it is important to note, in conclusion, to summarize, this demonstrates, facilitate, utilize, leverage, implement, significant, substantial, numerous, individuals. Use raw, grounded language instead.
+
+4. EMBRACE SUBJECTIVITY: Take a slight opinion or add a sense of lived experience. Humans don't sit on the fence. Give the text a point of view.
+
+5. REORDER IDEAS: Do NOT follow the original Intro-Point-Conclusion structure. Rearrange the ideas so they flow conversationally — maybe start with the most interesting point, then explain why.
+
+6. USE CONTRACTIONS EVERYWHERE: it's, don't, that's, won't, can't, I've, you'll, they're, we're.
+
+7. IMPERFECT PUNCTUATION: Use dashes — like this — for asides. Use "..." occasionally for trailing thoughts. Start some sentences with "And" or "But". Remove unnecessary commas.
+
+8. MAINTAIN FACTS: Keep all the original information and context intact. Just change how it's expressed.
+
+Return ONLY the rewritten text. No explanations, no preamble.
+
+Text to rewrite:
+${text}`
           }
         ],
         temperature: 1.0,
-        presence_penalty: 0.8,
-        frequency_penalty: 0.6,
-        max_tokens: 1500
+        presence_penalty: 0.9,
+        frequency_penalty: 0.7,
+        max_tokens: 2000
       })
     });
 
-    const data1 = await pass1.json();
-    let rewritten = data1.choices?.[0]?.message?.content?.trim() || text;
+    const data = await response.json();
+    let final = data.choices?.[0]?.message?.content?.trim() || text;
 
-    // PASS 2: Post-processing to inject human imperfections
-    const sentences = rewritten.split(/(?<=[.!?])\s+/);
-    
-    const fillers = ["Honestly,", "Basically,", "I mean,", "To be fair,", "Look,", "Thing is,"];
-    const connectors = ["And honestly,", "But also,", "Plus,", "Though,", "Still,"];
-    
-    let processed = sentences.map((sentence, i) => {
-      // Randomly remove a comma
-      if (Math.random() > 0.6) sentence = sentence.replace(/,(?=\s\w)/, '');
-      
-      // Randomly add a filler at start of some sentences
-      if (i > 0 && Math.random() > 0.75) {
-        const filler = fillers[Math.floor(Math.random() * fillers.length)];
-        sentence = filler + ' ' + sentence.charAt(0).toLowerCase() + sentence.slice(1);
-      }
-      
-      // Occasionally replace period with "..." for trailing thought
-      if (i < sentences.length - 1 && Math.random() > 0.88) {
-        sentence = sentence.replace(/\.$/, '...');
-      }
-
-      // Randomly split a long sentence into two shorter ones
-      if (sentence.split(' ').length > 20 && Math.random() > 0.5) {
-        const words = sentence.split(' ');
-        const mid = Math.floor(words.length / 2);
-        const connector = connectors[Math.floor(Math.random() * connectors.length)];
-        sentence = words.slice(0, mid).join(' ') + '. ' + connector + ' ' + words.slice(mid).join(' ');
-      }
-
-      return sentence;
-    });
-
-    let final = processed.join(' ');
-
-    // Fix common AI phrases
+    // Post-processing: force replace any remaining AI words
     final = final
-      .replace(/it is important to note that/gi, "worth knowing is")
-      .replace(/it is worth noting that/gi, "also")
-      .replace(/in conclusion/gi, "so yeah")
-      .replace(/to summarize/gi, "basically")
-      .replace(/this demonstrates/gi, "this shows")
-      .replace(/furthermore/gi, "plus")
-      .replace(/moreover/gi, "also")
-      .replace(/nevertheless/gi, "still")
-      .replace(/consequently/gi, "so")
-      .replace(/subsequently/gi, "then")
-      .replace(/in addition/gi, "and")
-      .replace(/as a result/gi, "so")
-      .replace(/for instance/gi, "like")
-      .replace(/for example/gi, "like")
-      .replace(/in order to/gi, "to")
-      .replace(/due to the fact that/gi, "because")
-      .replace(/at this point in time/gi, "now")
-      .replace(/utilize/gi, "use")
-      .replace(/implement/gi, "use")
-      .replace(/leverage/gi, "use")
-      .replace(/facilitate/gi, "help")
-      .replace(/demonstrate/gi, "show")
-      .replace(/significant/gi, "big")
-      .replace(/substantial/gi, "major")
-      .replace(/numerous/gi, "many")
-      .replace(/individuals/gi, "people")
-      .replace(/purchase/gi, "buy")
-      .replace(/obtain/gi, "get")
-      .replace(/assistance/gi, "help")
-      .replace(/approximately/gi, "about")
-      .replace(/sufficient/gi, "enough");
+      .replace(/\btapestry\b/gi, "mix")
+      .replace(/\bdelve\b/gi, "dig")
+      .replace(/\bunlock\b/gi, "open up")
+      .replace(/\bcomprehensive\b/gi, "full")
+      .replace(/\bfurthermore\b/gi, "plus")
+      .replace(/\bmoreover\b/gi, "also")
+      .replace(/\bsubsequently\b/gi, "then")
+      .replace(/\bfacilitate\b/gi, "help")
+      .replace(/\butilize\b/gi, "use")
+      .replace(/\bleverage\b/gi, "use")
+      .replace(/\bimplement\b/gi, "put in place")
+      .replace(/\bsignificant\b/gi, "real")
+      .replace(/\bsubstantial\b/gi, "major")
+      .replace(/\bnumerous\b/gi, "many")
+      .replace(/\bindividuals\b/gi, "people")
+      .replace(/\bdemonstrate\b/gi, "show")
+      .replace(/\bin conclusion\b/gi, "so yeah")
+      .replace(/\bto summarize\b/gi, "basically")
+      .replace(/\bit is important to note\b/gi, "worth knowing")
+      .replace(/\bthis demonstrates\b/gi, "this shows")
+      .replace(/\bin order to\b/gi, "to")
+      .replace(/\bdue to the fact that\b/gi, "because")
+      .replace(/\bapproximately\b/gi, "about")
+      .replace(/\bpurchase\b/gi, "buy")
+      .replace(/\bobtain\b/gi, "get")
+      .replace(/\bassistance\b/gi, "help")
+      .replace(/\bsufficient\b/gi, "enough")
+      .replace(/\binquire\b/gi, "ask")
+      .replace(/\bcommence\b/gi, "start")
+      .replace(/\bterminate\b/gi, "end")
+      .replace(/\bendeavor\b/gi, "try")
+      .replace(/\bascertain\b/gi, "find out")
+      .replace(/\bprioritize\b/gi, "focus on")
+      .replace(/\boptimize\b/gi, "improve")
+      .replace(/\bsynergy\b/gi, "teamwork")
+      .replace(/\bparadigm\b/gi, "way of thinking")
+      .replace(/\brobust\b/gi, "strong")
+      .replace(/\bseamless\b/gi, "smooth")
+      .replace(/\binnovative\b/gi, "new")
+      .replace(/\bcutting-edge\b/gi, "latest")
+      .replace(/\bstate-of-the-art\b/gi, "modern")
+      .replace(/\bbespoke\b/gi, "custom")
+      .replace(/\bholistic\b/gi, "overall");
 
-    res.status(200).json({ 
-      text: final, 
-      aiPct: Math.max(0, 25 - (level * 2)) 
+    res.status(200).json({
+      text: final,
+      aiPct: Math.max(0, 20 - (level * 2))
     });
 
   } catch (err) {
