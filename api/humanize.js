@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
 8. MAINTAIN FACTS: Keep all the original information and context intact. Just change how it's expressed.
 
-Return ONLY the rewritten text. No explanations, no preamble.
+Return ONLY the rewritten text. No explanations, no preamble, no markdown, no bullet points, no headers, no asterisks, no hashtags. Plain text only.
 
 Text to rewrite:
 ${text}`
@@ -54,7 +54,22 @@ ${text}`
     });
 
     const data = await response.json();
+    // Strip any markdown
     let final = data.choices?.[0]?.message?.content?.trim() || text;
+
+    // Strip markdown formatting
+    final = final
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_{1,2}(.*?)_{1,2}/g, '$1')
+      .replace(/`{1,3}[^`]*`{1,3}/g, '')
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/
+{3,}/g, '\n\n')
+      .trim();
 
     // Post-processing: force replace any remaining AI words
     final = final
