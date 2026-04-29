@@ -6,8 +6,40 @@ export default async function handler(req, res) {
 
   try {
     const { text, level } = req.body;
+    const intensity = level / 10;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // ─── HUMAN CONNECTORS POOL ───────────────────────────────
+    const connectors = [
+      "But here's the thing —", "Anyway,", "And look,",
+      "Which is wild when you think about it.", "The thing is,",
+      "Here's where it gets interesting:", "And that's kind of the point.",
+      "Funny enough,", "Not to go too deep into it, but",
+      "Which, honestly,", "To be fair,", "It boils down to this:",
+      "And I think that matters.", "But still —", "Go figure.",
+    ];
+
+    // ─── STAGE 1: DECONSTRUCT into raw claims ────────────────
+    const deconstructRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [{
+          role: "user",
+          content: `Extract every distinct fact, claim, or idea from this text as a numbered list. No explanations. Just the raw ideas, one per line, stripped of any structure or transitions.\n\nText:\n${text}`
+        }],
+        temperature: 0.3,
+        max_tokens: 800
+      })
+    });
+    const deconstructData = await deconstructRes.json();
+    const claims = deconstructData.choices?.[0]?.message?.content?.trim() || text;
+
+    // ─── STAGE 2: REWRITE each claim with perplexity injection ─
+    const rewriteRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -18,46 +50,80 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "system",
-            content: `You are a skilled human writer who rewrites AI-generated text to sound completely natural and human. You have a distinct voice — slightly opinionated, grounded, and real. You never sound like a language model.`
+            content: `You are a human with strong opinions and a casual writing style. You write like you're texting a smart friend. You use unexpected word choices — not wrong, just surprising. You never sound like Wikipedia.`
           },
           {
             role: "user",
-            content: `Rewrite the following text so it passes AI detectors like GPTZero completely. Follow these rules strictly:
+            content: `Take these raw ideas and rewrite them as natural human prose. Follow every rule:
 
-1. VARY SENTENCE DYNAMICS: Mix short punchy sentences (3-6 words) with longer complex ones. Never have 3 sentences of the same length in a row. Create natural burstiness.
+STRUCTURE RULES:
+- Use fragments. Deliberately. Like this.
+- Use rhetorical questions to break flow. Why does this matter? Because it does.
+- Use em-dashes—like this—to interrupt thoughts
+- CRITICAL: After every 2-3 long sentences, write a very short one. 2-5 words max. Then go long again.
+- Start some sentences with "And" or "But" — it's fine, humans do it
+- Never write 3 sentences with the same grammatical structure in a row
 
-2. INJECT PERSONALITY: Use a specific perspective. Add idioms, subtle metaphors, or imperfect conversational transitions like "The thing is,", "Now here's where it gets interesting,", "And that's exactly the point —", "Funny enough,", "Which, when you think about it,".
+WORD CHOICE RULES (perplexity injection):
+- Choose the SECOND word that comes to mind, not the first obvious one
+- "important" → "it actually matters" / "loud" / "charged"
+- "diverse" → "all over the place" / "a messy mix"
+- "rich" → "dense" / "loaded" / "thick with"
+- "connect" → "tie together" / "thread through"
+- Use ONE strong word instead of 3 adjectives. Never "rich, vibrant, and diverse"
+- BANNED WORDS: tapestry, delve, unlock, comprehensive, vibrant, foster, crucial, vital, seamless, robust, innovative, leverage, utilize, facilitate, demonstrate, significant, substantial, numerous, individuals, shaping, furthermore, moreover, subsequently, in conclusion, additionally, nevertheless
 
-3. AVOID AI-ISMS: NEVER use these words: tapestry, delve, unlock, comprehensive, shaping, furthermore, moreover, subsequently, it is important to note, in conclusion, to summarize, this demonstrates, facilitate, utilize, leverage, implement, significant, substantial, numerous, individuals. Use raw, grounded language instead.
+TONE RULES:
+- Add ONE personal opinion or observation
+- Make it feel like a late-night conversation about why this topic actually matters
+- Use contractions everywhere: it's, don't, that's, won't, can't, they're
+- Slightly imperfect is better than polished
 
-4. EMBRACE SUBJECTIVITY: Take a slight opinion or add a sense of lived experience. Humans don't sit on the fence. Give the text a point of view.
+OUTPUT: Return flowing paragraphs only. No bullet points, no markdown, no headers, no lists. Plain text.
 
-5. REORDER IDEAS: Do NOT follow the original Intro-Point-Conclusion structure. Rearrange the ideas so they flow conversationally — maybe start with the most interesting point, then explain why.
-
-6. USE CONTRACTIONS EVERYWHERE: it's, don't, that's, won't, can't, I've, you'll, they're, we're.
-
-7. IMPERFECT PUNCTUATION: Use dashes — like this — for asides. Use "..." occasionally for trailing thoughts. Start some sentences with "And" or "But". Remove unnecessary commas.
-
-8. MAINTAIN FACTS: Keep all the original information and context intact. Just change how it's expressed.
-
-Return ONLY the rewritten text. No explanations, no preamble, no markdown, no bullet points, no headers, no asterisks, no hashtags. Plain text only.
-
-Text to rewrite:
-${text}`
+Raw ideas to rewrite:
+${claims}`
           }
         ],
         temperature: 1.0,
-        presence_penalty: 0.9,
-        frequency_penalty: 0.7,
+        presence_penalty: 0.95,
+        frequency_penalty: 0.85,
         max_tokens: 2000
       })
     });
 
-    const data = await response.json();
-    // Strip any markdown
-    let final = data.choices?.[0]?.message?.content?.trim() || text;
+    const rewriteData = await rewriteRes.json();
+    let rewritten = rewriteData.choices?.[0]?.message?.content?.trim() || text;
 
-    // Strip markdown formatting
+    // ─── STAGE 3: BURSTINESS ENFORCEMENT ─────────────────────
+    // Split into sentences and algorithmically enforce length variance
+    const sentences = rewritten.match(/[^.!?]+[.!?]+/g) || [rewritten];
+    let bursty = [];
+    let i = 0;
+
+    while (i < sentences.length) {
+      const s = sentences[i].trim();
+      const wordCount = s.split(' ').length;
+
+      // If 3 sentences in a row are similar length, inject a short one
+      if (i >= 2) {
+        const prev1 = bursty[bursty.length - 1]?.split(' ').length || 0;
+        const prev2 = bursty[bursty.length - 2]?.split(' ').length || 0;
+        const variance = Math.abs(prev1 - prev2);
+        if (variance < 4 && prev1 > 8) {
+          // inject a random short connector
+          const c = connectors[Math.floor(Math.random() * connectors.length)];
+          bursty.push(c);
+        }
+      }
+      bursty.push(s);
+      i++;
+    }
+
+    let final = bursty.join(' ');
+
+    // ─── STAGE 4: FINAL CLEANUP ───────────────────────────────
+    // Strip markdown
     final = final
       .replace(/#{1,6}\s+/g, '')
       .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -67,59 +133,48 @@ ${text}`
       .replace(/^\s*[-*+]\s+/gm, '')
       .replace(/^\s*\d+\.\s+/gm, '')
       .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-      .replace(/
-{3,}/g, '\n\n')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    // Post-processing: force replace any remaining AI words
+    // Kill any surviving AI words
     final = final
       .replace(/\btapestry\b/gi, "mix")
-      .replace(/\bdelve\b/gi, "dig")
+      .replace(/\bdelve\b/gi, "dig into")
       .replace(/\bunlock\b/gi, "open up")
-      .replace(/\bcomprehensive\b/gi, "full")
-      .replace(/\bfurthermore\b/gi, "plus")
-      .replace(/\bmoreover\b/gi, "also")
-      .replace(/\bsubsequently\b/gi, "then")
-      .replace(/\bfacilitate\b/gi, "help")
+      .replace(/\bvibrant\b/gi, "electric")
+      .replace(/\bfoster\b/gi, "build")
+      .replace(/\bcrucial\b/gi, "key")
+      .replace(/\bseamless\b/gi, "smooth")
+      .replace(/\brobust\b/gi, "strong")
       .replace(/\butilize\b/gi, "use")
       .replace(/\bleverage\b/gi, "use")
-      .replace(/\bimplement\b/gi, "put in place")
-      .replace(/\bsignificant\b/gi, "real")
-      .replace(/\bsubstantial\b/gi, "major")
+      .replace(/\bfacilitate\b/gi, "help")
+      .replace(/\bdemonstrate\b/gi, "show")
+      .replace(/\bsignificant\b/gi, "major")
       .replace(/\bnumerous\b/gi, "many")
       .replace(/\bindividuals\b/gi, "people")
-      .replace(/\bdemonstrate\b/gi, "show")
-      .replace(/\bin conclusion\b/gi, "so yeah")
-      .replace(/\bto summarize\b/gi, "basically")
-      .replace(/\bit is important to note\b/gi, "worth knowing")
-      .replace(/\bthis demonstrates\b/gi, "this shows")
+      .replace(/\bfurthermore\b/gi, "and look,")
+      .replace(/\bmoreover\b/gi, "also,")
+      .replace(/\bin conclusion\b/gi, "it boils down to this:")
+      .replace(/\badditionally\b/gi, "and,")
+      .replace(/\bnevertheless\b/gi, "still,")
+      .replace(/\bconsequently\b/gi, "so,")
+      .replace(/\bsubsequently\b/gi, "after that,")
       .replace(/\bin order to\b/gi, "to")
       .replace(/\bdue to the fact that\b/gi, "because")
       .replace(/\bapproximately\b/gi, "about")
       .replace(/\bpurchase\b/gi, "buy")
       .replace(/\bobtain\b/gi, "get")
-      .replace(/\bassistance\b/gi, "help")
-      .replace(/\bsufficient\b/gi, "enough")
-      .replace(/\binquire\b/gi, "ask")
       .replace(/\bcommence\b/gi, "start")
-      .replace(/\bterminate\b/gi, "end")
       .replace(/\bendeavor\b/gi, "try")
-      .replace(/\bascertain\b/gi, "find out")
-      .replace(/\bprioritize\b/gi, "focus on")
       .replace(/\boptimize\b/gi, "improve")
-      .replace(/\bsynergy\b/gi, "teamwork")
-      .replace(/\bparadigm\b/gi, "way of thinking")
-      .replace(/\brobust\b/gi, "strong")
-      .replace(/\bseamless\b/gi, "smooth")
-      .replace(/\binnovative\b/gi, "new")
-      .replace(/\bcutting-edge\b/gi, "latest")
-      .replace(/\bstate-of-the-art\b/gi, "modern")
-      .replace(/\bbespoke\b/gi, "custom")
-      .replace(/\bholistic\b/gi, "overall");
+      .replace(/\bholistic\b/gi, "overall")
+      .replace(/\binquire\b/gi, "ask")
+      .replace(/\bascertain\b/gi, "find out");
 
     res.status(200).json({
       text: final,
-      aiPct: Math.max(0, 20 - (level * 2))
+      aiPct: Math.max(0, 15 - (level * 1.5))
     });
 
   } catch (err) {
