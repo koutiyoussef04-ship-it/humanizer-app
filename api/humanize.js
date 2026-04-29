@@ -24,14 +24,15 @@ export default async function handler(req, res) {
             role: "user",
             content: `Rewrite the following text so it sounds completely human. Follow these rules:
 
-- Mix very short sentences (2-5 words) with longer ones randomly. This is critical.
-- Use contractions everywhere: it's, don't, that's, won't, can't, they're
-- Use spoken transitions: "But here's the thing,", "Anyway,", "And look,", "To be fair,", "Funny enough,"
-- Use fragments deliberately. Like this. Just a few words.
+- Write long flowing sentences that build on each other naturally. Avoid short choppy sentences.
+- Aim for sentences of 20-35 words on average. Let ideas breathe and connect.
+- Use contractions everywhere: it's don't that's won't can't they're we're
+- Use spoken transitions: "But here's the thing" "Anyway" "And look" "To be fair" "Funny enough" "Which makes sense when you think about it"
 - Add one personal opinion or observation
-- NEVER use: furthermore, moreover, in conclusion, additionally, tapestry, delve, vibrant, robust, utilize, leverage, facilitate, demonstrate, significant, numerous, individuals, seamless, comprehensive, foster, crucial
-- NEVER use em-dashes (—) or en-dashes (–). Use commas or periods only.
-- No bullet points, no bold, no headers, no markdown. Plain text paragraphs only.
+- NEVER use commas. Replace every comma with a period or rewrite the sentence to flow without one.
+- NEVER use em-dashes (—) or en-dashes (–).
+- NEVER use: furthermore moreover in conclusion additionally tapestry delve vibrant robust utilize leverage facilitate demonstrate significant numerous individuals seamless comprehensive foster crucial
+- No bullet points no bold no headers no markdown. Plain text paragraphs only.
 - Keep all original facts and meaning intact.
 
 Return ONLY the rewritten text. Nothing else.
@@ -59,7 +60,8 @@ ${text}`
       .replace(/^\s*[-*+]\s+/gm, '')
       .replace(/^\s*\d+\.\s+/gm, '')
       .replace(/\n{3,}/g, '\n\n')
-      .replace(/[—–]/g, ',')
+      .replace(/[—–]/g, ' ')
+      .replace(/,/g, '')
       .trim();
 
     // Kill AI words
