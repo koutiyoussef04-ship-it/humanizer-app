@@ -59,7 +59,7 @@ export default async function handler(req, res) {
 STRUCTURE RULES:
 - Use fragments. Deliberately. Like this.
 - Use rhetorical questions to break flow. Why does this matter? Because it does.
-- Use em-dashes—like this—to interrupt thoughts
+- NEVER use em-dashes (—) or en-dashes (–). Use commas or periods instead.
 - CRITICAL: After every 2-3 long sentences, write a very short one. 2-5 words max. Then go long again.
 - Start some sentences with "And" or "But" — it's fine, humans do it
 - Never write 3 sentences with the same grammatical structure in a row
@@ -103,6 +103,13 @@ ${claims}`
 
     while (i < sentences.length) {
       const s = sentences[i].trim();
+
+    // Remove em-dashes
+    final = final
+      .replace(/—/g, '-')
+      .replace(/–/g, '-')
+      .replace(/\s-\s/g, ', ')
+      .replace(/-{2,}/g, ',');
       const wordCount = s.split(' ').length;
 
       // If 3 sentences in a row are similar length, inject a short one
