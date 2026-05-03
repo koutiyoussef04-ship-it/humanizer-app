@@ -22,7 +22,9 @@ export default async function handler(req, res) {
           },
           {
             role: "user",
-            content: `Rewrite the following text so it sounds completely human. Follow these rules:
+            content: `CRITICAL RULE: You MUST write your response in the EXACT SAME LANGUAGE as the input text. If the input is in Spanish, respond in Spanish. If French, respond in French. Never translate.
+
+Rewrite the following text so it sounds completely human. Follow these rules:
 
 - Write long flowing sentences that build on each other naturally. Avoid short choppy sentences.
 - Aim for sentences of 20-35 words on average. Let ideas breathe and connect.
