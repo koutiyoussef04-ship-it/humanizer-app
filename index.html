@@ -59,6 +59,57 @@ const css = `
     display: flex; height: 700px; border-radius: 12px; overflow: hidden;
     border: 0.5px solid var(--border); position: relative;
   }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    #root { padding: 0; }
+    .H {
+      flex-direction: column; height: 100vh; height: 100dvh;
+      border-radius: 0; border: none;
+    }
+    .H-nav { display: none; }
+    .H-right { display: none; }
+    .H-main { flex: 1; overflow-y: auto; }
+    .H-topbar { padding: 0 14px; height: 44px; }
+    .H-page-head { padding: 12px 14px 8px; }
+    .H-page-head h1 { font-size: 16px; }
+    .H-level-row { padding: 0 14px 8px; gap: 6px; flex-wrap: wrap; }
+    .H-level-pill { width: 22px; height: 22px; font-size: 9px; }
+    .H-level-desc { font-size: 8px; }
+    .H-editor-card { margin: 0 14px; }
+    .H-editor-footer { padding: 8px 12px; }
+    .H-footer-stats { gap: 8px; }
+    .H-ai-pct-bar { margin: 0 14px; }
+    .H-adv-btn { margin: 6px 14px 8px; }
+    .ob-card { width: calc(100vw - 32px); padding: 28px 22px; }
+    .ob-title { font-size: 20px; }
+    .ob-row2 { grid-template-columns: 1fr; }
+    .ob-use-grid { grid-template-columns: 1fr 1fr; }
+    .btn-humanize { padding: 8px 14px; font-size: 10px; letter-spacing: .1em; }
+    .P-account { padding: 0 14px 14px; }
+    .P-plans { padding: 0 14px 14px; }
+    .plans-grid { grid-template-columns: 1fr; }
+    .P-detector { padding: 0 14px 12px; }
+    .det-body { flex-direction: column; }
+    .det-result-col { width: 100%; border-top: 0.5px solid var(--bd); border-right: none; }
+    /* Mobile bottom nav */
+    .H-mobile-nav {
+      display: flex; border-top: 0.5px solid var(--bd);
+      background: rgba(0,0,0,.8); flex-shrink: 0;
+    }
+    .H-mobile-nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 3px; padding: 8px 4px;
+      background: none; border: none; cursor: pointer; transition: all .2s;
+    }
+    .H-mobile-nav-item.active .H-mobile-nav-icon { color: var(--gold-lt); }
+    .H-mobile-nav-item.active .H-mobile-nav-label { color: var(--gold-lt); }
+    .H-mobile-nav-icon { font-size: 16px; color: var(--muted); }
+    .H-mobile-nav-label { font-family: var(--ffm); font-size: 8px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  }
+  @media (min-width: 769px) {
+    .H-mobile-nav { display: none; }
+  }
   .H::before {
     content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
     background:
@@ -1019,15 +1070,19 @@ function PlansPage({ onUpgrade }) {
    MAIN APP
 ═══════════════════════════════════════════════════════════ */
 function HumanizerDashboard() {
-  const [onboarded,  setOnboarded]  = useState(false);
-  const [user,       setUser]       = useState({ firstName:"", lastName:"", email:"", useCase:"" });
+  // Load from localStorage on first render
+  const storedUser = (() => { try { return JSON.parse(localStorage.getItem('aurum_user')||'null'); } catch(e){return null;} })();
+  const storedUses = (() => { try { const u=JSON.parse(localStorage.getItem('aurum_uses')||'{}'); return storedUser ? (u[storedUser.email]||0) : 0; } catch(e){return 0;} })();
+
+  const [onboarded,  setOnboarded]  = useState(!!storedUser);
+  const [user,       setUser]       = useState(storedUser || { firstName:"", lastName:"", email:"", useCase:"" });
   const [view,       setView]       = useState("humanizer");
   const [inputText,  setInputText]  = useState("");
   const [outputText, setOutputText] = useState("");
   const [activeTab,  setActiveTab]  = useState("input");
   const [level,      setLevel]      = useState(8);
-  const [usesLeft,   setUsesLeft]   = useState(FREE_USES);
-  const [usedCount,  setUsedCount]  = useState(0);
+  const [usesLeft,   setUsesLeft]   = useState(Math.max(0, FREE_USES - storedUses));
+  const [usedCount,  setUsedCount]  = useState(storedUses);
   const [processing, setProcessing] = useState(false);
   const [showModal,  setShowModal]  = useState(false);
   const [aiScore,    setAiScore]    = useState(null);   // for right panel
@@ -1062,7 +1117,8 @@ function HumanizerDashboard() {
         body: JSON.stringify({ text, level })
       });
       const data = await response.json();
-      return { text: data.text || text, aiPct: data.aiPct ?? null };
+      // Preserve original language — pass detected lang back
+      return { text: data.text || text, aiPct: data.aiPct ?? 0 };
     } catch (err) {
       console.error("Humanize error:", err);
       return { text, aiPct: null };
@@ -1119,7 +1175,16 @@ const handleAiScan = useCallback(async (text) => {
         setOutputAiPct(pct);   // ← AI % bar in editor
         setActiveTab("output");
         setProcessing(false);
-        setUsedCount(c=>c+1);
+        setUsedCount(c=>{
+          const newCount = c+1;
+          // Persist use count per email
+          try {
+            const stored = JSON.parse(localStorage.getItem('aurum_uses')||'{}');
+            if(user.email) stored[user.email] = newCount;
+            localStorage.setItem('aurum_uses', JSON.stringify(stored));
+          } catch(e){}
+          return newCount;
+        });
         setUsesLeft(prev=>{ const n=prev-1; if(n<=0) setTimeout(()=>setShowModal(true),500); return n; });
       },1900);
     } catch(e){ console.error(e); setProcessing(false); }
@@ -1156,8 +1221,20 @@ const handleAiScan = useCallback(async (text) => {
 
   /* Onboarding complete */
   const handleOnboardComplete = (profile) => {
-    setUser({ firstName:profile.firstName, lastName:profile.lastName, email:profile.email, useCase:profile.useCase });
+    const userData = { firstName:profile.firstName, lastName:profile.lastName, email:profile.email, useCase:profile.useCase };
+    setUser(userData);
     setOnboarded(true);
+    // Persist to localStorage so user doesn't re-enter on refresh
+    try {
+      localStorage.setItem('aurum_user', JSON.stringify(userData));
+      // Track uses per email — reset if different email
+      const stored = JSON.parse(localStorage.getItem('aurum_uses')||'{}');
+      if (!stored[profile.email]) stored[profile.email] = 0;
+      localStorage.setItem('aurum_uses', JSON.stringify(stored));
+      const usedSoFar = stored[profile.email] || 0;
+      setUsesLeft(Math.max(0, FREE_USES - usedSoFar));
+      setUsedCount(usedSoFar);
+    } catch(e) {}
   };
 
   const NAV = [
@@ -1291,14 +1368,14 @@ const handleAiScan = useCallback(async (text) => {
               {overLimit&&<div className="H-limit-strip">300-word limit for free plan · upgrade to Gold for unlimited length</div>}
             </div>
 
-            {/* AI Percentage bar — shown in editor area below the card after humanize */}
-            {outputAiPct!==null&&(
+            {/* AI Percentage bar — always show after humanize, 0% if humanized by app */}
+            {outputText&&(
               <div className="H-ai-pct-bar">
                 <span className="H-ai-pct-label">AI Content</span>
                 <div className="H-ai-pct-track">
-                  <div className="H-ai-pct-fill" style={{width:`${outputAiPct}%`,background:pctColor}}/>
+                  <div className="H-ai-pct-fill" style={{width:`${outputAiPct??0}%`,background:pctColor}}/>
                 </div>
-                <span className="H-ai-pct-val" style={{color:pctColor}}>{outputAiPct}%</span>
+                <span className="H-ai-pct-val" style={{color:pctColor}}>{outputAiPct??0}%</span>
               </div>
             )}
 
@@ -1347,6 +1424,21 @@ const handleAiScan = useCallback(async (text) => {
             </div>
           </aside>
         )}
+
+        {/* ── MOBILE NAV ── */}
+        <nav className="H-mobile-nav">
+          {[
+            {id:"humanizer",icon:"✎",label:"Humanize"},
+            {id:"detector", icon:"◎",label:"Detector"},
+            {id:"account",  icon:"◈",label:"Account"},
+            {id:"plans",    icon:"◇",label:"Plans"},
+          ].map(n=>(
+            <button key={n.id} className={`H-mobile-nav-item${view===n.id?" active":""}`} onClick={()=>setView(n.id)}>
+              <span className="H-mobile-nav-icon">{n.icon}</span>
+              <span className="H-mobile-nav-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
 
         {/* ── GOLD MODAL ── */}
         {showModal&&(
