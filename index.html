@@ -1070,19 +1070,19 @@ function PlansPage({ onUpgrade }) {
    MAIN APP
 ═══════════════════════════════════════════════════════════ */
 function HumanizerDashboard() {
-  // Load from localStorage on first render
-  const storedUser = (() => { try { return JSON.parse(localStorage.getItem('aurum_user')||'null'); } catch(e){return null;} })();
-  const storedUses = (() => { try { const u=JSON.parse(localStorage.getItem('aurum_uses')||'{}'); return storedUser ? (u[storedUser.email]||0) : 0; } catch(e){return 0;} })();
+  // Load cached user from localStorage (email only for DB lookup)
+  const cachedEmail = (() => { try { return localStorage.getItem('aurum_email')||null; } catch(e){return null;} })();
 
-  const [onboarded,  setOnboarded]  = useState(!!storedUser);
-  const [user,       setUser]       = useState(storedUser || { firstName:"", lastName:"", email:"", useCase:"" });
+  const [onboarded,  setOnboarded]  = useState(false);
+  const [user,       setUser]       = useState({ firstName:"", lastName:"", email:"", useCase:"", plan:"free" });
+  const [dbLoading,  setDbLoading]  = useState(!!cachedEmail);
   const [view,       setView]       = useState("humanizer");
   const [inputText,  setInputText]  = useState("");
   const [outputText, setOutputText] = useState("");
   const [activeTab,  setActiveTab]  = useState("input");
   const [level,      setLevel]      = useState(8);
-  const [usesLeft,   setUsesLeft]   = useState(Math.max(0, FREE_USES - storedUses));
-  const [usedCount,  setUsedCount]  = useState(storedUses);
+  const [usesLeft,   setUsesLeft]   = useState(FREE_USES);
+  const [usedCount,  setUsedCount]  = useState(0);
   const [processing, setProcessing] = useState(false);
   const [showModal,  setShowModal]  = useState(false);
   const [aiScore,    setAiScore]    = useState(null);   // for right panel
@@ -1094,12 +1094,33 @@ function HumanizerDashboard() {
   const laserRef = useRef(null);
   const wordCount  = wc(inputText);
   const overLimit  = wordCount > WORD_LIMIT;
-  const canHumanize = !overLimit && inputText.trim().length>0 && !processing && usesLeft>0;
+  const isGold = user.plan === 'gold';
+  const canHumanize = (isGold || (!overLimit && usesLeft>0)) && inputText.trim().length>0 && !processing;
   const badgeClass  = usesLeft<=1?"danger":usesLeft<=2?"warn":"";
   const usagePct    = ((FREE_USES-usesLeft)/FREE_USES)*100;
   const scoreColor  = aiScore==null?"var(--muted)":aiScore<40?"var(--ok)":aiScore<70?"var(--warn)":"var(--bad)";
 
   useEffect(()=>{ setMetrics(calcMetrics(inputText)); },[inputText]);
+
+  // Load user from DB on mount if email cached
+  useEffect(()=>{
+    if (!cachedEmail) return;
+    fetch(`/api/user?email=${encodeURIComponent(cachedEmail)}`)
+      .then(r=>r.json())
+      .then(data=>{
+        if (data.exists) {
+          const plan = data.plan || 'free';
+          const usesCount = data.uses_count || 0;
+          const usesRemaining = plan === 'gold' ? 999 : Math.max(0, FREE_USES - usesCount);
+          setUser({ firstName: data.first_name||'', lastName: data.last_name||'', email: data.email, useCase:'', plan });
+          setUsesLeft(usesRemaining);
+          setUsedCount(usesCount);
+          setOnboarded(true);
+        }
+        setDbLoading(false);
+      })
+      .catch(()=>setDbLoading(false));
+  },[]);
 
   /* ══════════════════════════════════════════════════════════
      handleTransform — FILL IN YOUR BACKEND LOGIC HERE
@@ -1175,16 +1196,17 @@ const handleAiScan = useCallback(async (text) => {
         setOutputAiPct(pct);   // ← AI % bar in editor
         setActiveTab("output");
         setProcessing(false);
-        setUsedCount(c=>{
-          const newCount = c+1;
-          // Persist use count per email
-          try {
-            const stored = JSON.parse(localStorage.getItem('aurum_uses')||'{}');
-            if(user.email) stored[user.email] = newCount;
-            localStorage.setItem('aurum_uses', JSON.stringify(stored));
-          } catch(e){}
-          return newCount;
-        });
+        // Increment in DB
+        if (user.email) {
+          fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, action: 'increment' })
+          }).then(r=>r.json()).then(data=>{
+            if (data.error === 'limit_reached') { setShowModal(true); }
+          }).catch(()=>{});
+        }
+        setUsedCount(c=>c+1);
         setUsesLeft(prev=>{ const n=prev-1; if(n<=0) setTimeout(()=>setShowModal(true),500); return n; });
       },1900);
     } catch(e){ console.error(e); setProcessing(false); }
@@ -1220,21 +1242,28 @@ const handleAiScan = useCallback(async (text) => {
   },[]);
 
   /* Onboarding complete */
-  const handleOnboardComplete = (profile) => {
-    const userData = { firstName:profile.firstName, lastName:profile.lastName, email:profile.email, useCase:profile.useCase };
-    setUser(userData);
-    setOnboarded(true);
-    // Persist to localStorage so user doesn't re-enter on refresh
+  const handleOnboardComplete = async (profile) => {
     try {
-      localStorage.setItem('aurum_user', JSON.stringify(userData));
-      // Track uses per email — reset if different email
-      const stored = JSON.parse(localStorage.getItem('aurum_uses')||'{}');
-      if (!stored[profile.email]) stored[profile.email] = 0;
-      localStorage.setItem('aurum_uses', JSON.stringify(stored));
-      const usedSoFar = stored[profile.email] || 0;
-      setUsesLeft(Math.max(0, FREE_USES - usedSoFar));
-      setUsedCount(usedSoFar);
-    } catch(e) {}
+      // Register in DB (ignores if already exists)
+      const resp = await fetch('/api/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: profile.email, firstName: profile.firstName, lastName: profile.lastName, action: 'register' })
+      });
+      const data = await resp.json();
+      const plan = data.plan || 'free';
+      const usesCount = data.uses_count || 0;
+      const usesRemaining = plan === 'gold' ? 999 : Math.max(0, FREE_USES - usesCount);
+      setUser({ firstName: data.first_name||profile.firstName, lastName: data.last_name||profile.lastName, email: profile.email, useCase: profile.useCase, plan });
+      setUsesLeft(usesRemaining);
+      setUsedCount(usesCount);
+      // Cache email for auto-login on next visit
+      try { localStorage.setItem('aurum_email', profile.email.toLowerCase()); } catch(e){}
+    } catch(e) {
+      // Fallback to local if DB fails
+      setUser({ firstName:profile.firstName, lastName:profile.lastName, email:profile.email, useCase:profile.useCase, plan:'free' });
+    }
+    setOnboarded(true);
   };
 
   const NAV = [
@@ -1263,7 +1292,15 @@ const handleAiScan = useCallback(async (text) => {
       <div className="H">
 
         {/* ── ONBOARDING ── */}
-        {!onboarded && <Onboarding onComplete={handleOnboardComplete}/>}
+        {dbLoading && (
+          <div style={{position:'absolute',inset:0,zIndex:300,background:'rgba(12,11,9,0.97)',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12}}>
+            <div style={{textAlign:'center'}}>
+              <div className="H-nav-gem" style={{width:40,height:40,margin:'0 auto 16px',fontSize:18}}>✦</div>
+              <div style={{fontFamily:'var(--ffm)',fontSize:11,color:'var(--gold)',letterSpacing:'.2em',textTransform:'uppercase'}}>Loading your account…</div>
+            </div>
+          </div>
+        )}
+        {!dbLoading && !onboarded && <Onboarding onComplete={handleOnboardComplete}/>}
 
         {/* ── LEFT NAV ── */}
         <nav className="H-nav">
@@ -1286,7 +1323,7 @@ const handleAiScan = useCallback(async (text) => {
               <div className="H-avatar">{initials||"?"}</div>
               <div className="H-avatar-info">
                 <div className="H-avatar-name">{user.firstName||"Guest"} {user.lastName}</div>
-                <div className="H-avatar-tier">Free Plan</div>
+                <div className="H-avatar-tier">{user.plan==='gold'?'Gold Plan ✦':'Free Plan'}</div>
               </div>
             </div>
           </div>
@@ -1365,7 +1402,7 @@ const handleAiScan = useCallback(async (text) => {
                   </button>
                 </div>
               </div>
-              {overLimit&&<div className="H-limit-strip">300-word limit for free plan · upgrade to Gold for unlimited length</div>}
+              {overLimit&&!isGold&&<div className="H-limit-strip">300-word limit for free plan · upgrade to Gold for unlimited length</div>}
             </div>
 
             {/* AI Percentage bar — always show after humanize, 0% if humanized by app */}
