@@ -12,23 +12,58 @@ export default async function handler(req, res) {
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const FREE_LIMIT   = 10;
+
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${SUPABASE_KEY}`
   };
 
-  if (req.method === 'GET') {
+  // Helper: get user from DB
+  async function getUser(email) {
     const resp = await fetch(
       `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
       { headers }
     );
     const users = await resp.json();
-    if (!users.length) return res.status(200).json({ exists: false });
-    return res.status(200).json({ exists: true, ...users[0] });
+    return users[0] || null;
   }
 
+  // Helper: check if uses should reset (new month)
+  function shouldResetUses(user) {
+    if (!user.updated_at) return false;
+    const lastUpdate = new Date(user.updated_at);
+    const now = new Date();
+    return lastUpdate.getMonth() !== now.getMonth() ||
+           lastUpdate.getFullYear() !== now.getFullYear();
+  }
+
+  // GET — fetch user data
+  if (req.method === 'GET') {
+    const user = await getUser(email);
+    if (!user) return res.status(200).json({ exists: false });
+
+    // Auto-reset uses if new month
+    if (user.plan !== 'gold' && shouldResetUses(user)) {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ uses_count: 0, updated_at: new Date().toISOString() })
+        }
+      );
+      user.uses_count = 0;
+    }
+
+    return res.status(200).json({ exists: true, ...user });
+  }
+
+  // POST
   if (req.method === 'POST') {
+
+    // Register new user
     if (action === 'register') {
       await fetch(`${SUPABASE_URL}/rest/v1/users`, {
         method: 'POST',
@@ -38,37 +73,42 @@ export default async function handler(req, res) {
           first_name: firstName || '',
           last_name: lastName || '',
           plan: 'free',
-          uses_count: 0
+          uses_count: 0,
+          updated_at: new Date().toISOString()
         })
       });
-      const resp = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
-        { headers }
-      );
-      const users = await resp.json();
-      return res.status(200).json({ exists: true, ...users[0] });
+      const user = await getUser(email);
+      return res.status(200).json({ exists: true, ...(user || {}) });
     }
 
+    // Increment uses
     if (action === 'increment') {
-      const getResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=uses_count,plan`,
-        { headers }
-      );
-      const users = await getResp.json();
-      if (!users.length) return res.status(404).json({ error: 'User not found' });
-      const { uses_count, plan } = users[0];
-      if (plan !== 'gold' && uses_count >= 5) {
-        return res.status(403).json({ error: 'limit_reached', plan });
+      const user = await getUser(email);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      // Auto-reset if new month
+      let usesCount = user.uses_count || 0;
+      if (user.plan !== 'gold' && shouldResetUses(user)) {
+        usesCount = 0;
       }
+
+      // Check limit
+      if (user.plan !== 'gold' && usesCount >= FREE_LIMIT) {
+        return res.status(403).json({ error: 'limit_reached', plan: user.plan });
+      }
+
       await fetch(
         `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
         {
           method: 'PATCH',
           headers: { ...headers, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ uses_count: uses_count + 1, updated_at: new Date().toISOString() })
+          body: JSON.stringify({
+            uses_count: usesCount + 1,
+            updated_at: new Date().toISOString()
+          })
         }
       );
-      return res.status(200).json({ uses_count: uses_count + 1, plan });
+      return res.status(200).json({ uses_count: usesCount + 1, plan: user.plan });
     }
   }
 
