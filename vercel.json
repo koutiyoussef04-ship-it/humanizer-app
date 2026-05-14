@@ -5,8 +5,8 @@
     { "src": "api/*.js", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/api/detect",   "dest": "/api/detect.js" },
-    { "src": "/api/humanize", "dest": "/api/humanize.js" },
-    { "src": "/(.*)",         "dest": "/index.html" }
+    { "src": "/api/(.*)", "dest": "/api/$1.js" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
