@@ -1,5 +1,9 @@
 {
   "version": 2,
+  "builds": [
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "api/*.js", "use": "@vercel/node" }
+  ],
   "routes": [
     { "src": "/api/detect",   "dest": "/api/detect.js" },
     { "src": "/api/humanize", "dest": "/api/humanize.js" },
