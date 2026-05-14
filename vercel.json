@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/api/detect",   "dest": "/api/detect.js" },
+    { "src": "/api/humanize", "dest": "/api/humanize.js" },
+    { "src": "/(.*)",         "dest": "/index.html" }
+  ]
+}
