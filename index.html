@@ -1,116 +1,1541 @@
-export  default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurum AI — Humanizer</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0c0b09; }
+    #root { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 
-  const { email, firstName, lastName, action } = req.method === 'GET'
-    ? req.query
-    : req.body;
+    @media (max-width: 768px) {
+      #root { padding: 0; min-height: 100dvh; }
+      .H { flex-direction: column !important; height: 100dvh !important; border-radius: 0 !important; border: none !important; }
+      .H-nav { display: none !important; }
+      .H-right { display: none !important; }
+      .H-main { flex: 1; overflow-y: auto; }
+      .H-topbar { padding: 0 14px !important; height: 44px !important; }
+      .H-page-head { padding: 12px 14px 8px !important; }
+      .H-page-head h1 { font-size: 16px !important; }
+      .H-level-row { padding: 0 14px 8px !important; gap: 6px !important; flex-wrap: wrap !important; }
+      .H-level-pill { width: 22px !important; height: 22px !important; font-size: 9px !important; }
+      .H-editor-card { margin: 0 14px !important; }
+      .H-editor-footer { padding: 8px 12px !important; }
+      .H-ai-pct-bar { margin: 0 14px !important; }
+      .H-adv-btn { margin: 6px 14px 8px !important; }
+      .ob-card { width: calc(100vw - 32px) !important; padding: 28px 22px !important; }
+      .ob-title { font-size: 20px !important; }
+      .ob-row2 { grid-template-columns: 1fr !important; }
+      .btn-humanize { padding: 8px 14px !important; font-size: 10px !important; }
+      .P-account { padding: 0 14px 14px !important; }
+      .P-plans { padding: 0 14px 14px !important; }
+      .plans-grid { grid-template-columns: 1fr !important; }
+      .P-detector { padding: 0 14px 12px !important; }
+      .det-body { flex-direction: column !important; }
+      .det-result-col { width: 100% !important; border-top: 0.5px solid rgba(201,168,76,0.14) !important; border-right: none !important; }
+      .H-mobile-nav { display: flex !important; border-top: 0.5px solid rgba(201,168,76,0.14); background: rgba(0,0,0,.9); flex-shrink: 0; }
+      .H-mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 10px 4px; background: none; border: none; cursor: pointer; }
+      .H-mobile-nav-icon { font-size: 18px; color: #7a6a4a; }
+      .H-mobile-nav-label { font-family: 'DM Mono', monospace; font-size: 8px; color: #7a6a4a; letter-spacing: .08em; text-transform: uppercase; }
+      .H-mobile-nav-item.active .H-mobile-nav-icon { color: #e8cc80; }
+      .H-mobile-nav-item.active .H-mobile-nav-label { color: #e8cc80; }
+    }
+    @media (min-width: 769px) {
+      .H-mobile-nav { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useCallback, useEffect } = React;
 
-  if (!email) return res.status(400).json({ error: 'Email required' });
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
-  const FREE_LIMIT   = 10;
+/* ═══════════════════════════════════════════════════════════
+   STYLES
+═══════════════════════════════════════════════════════════ */
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Cinzel:wght@400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap');
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_KEY,
-    'Authorization': `Bearer ${SUPABASE_KEY}`
+  :root {
+    --gold:      #c9a84c;
+    --gold-lt:   #e8cc80;
+    --gold-dk:   #8a6820;
+    --gold-glow: rgba(201,168,76,0.28);
+    --gold-dim:  rgba(201,168,76,0.09);
+    --gold-line: rgba(201,168,76,0.32);
+    --bg:        #0c0b09;
+    --bg2:       #0f0e0b;
+    --glass:     rgba(201,168,76,0.04);
+    --glass2:    rgba(255,255,255,0.022);
+    --text:      #e8dcc8;
+    --muted:     #7a6a4a;
+    --dim:       #3a3020;
+    --border:    rgba(201,168,76,0.35);
+    --bd:        rgba(201,168,76,0.14);
+    --ok:        #4caf7a;
+    --warn:      #e8a04c;
+    --bad:       #c95a4c;
+    --ffd:       'Cinzel', serif;
+    --ffb:       'Cormorant Garamond', serif;
+    --ffm:       'DM Mono', monospace;
+    --r:         8px;
+    --rs:        4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ROOT */
+  .H {
+    background: var(--bg); font-family: var(--ffb); color: var(--text);
+    display: flex; height: 700px; border-radius: 12px; overflow: hidden;
+    border: 0.5px solid var(--border); position: relative;
+  }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    #root { padding: 0; }
+    .H {
+      flex-direction: column; height: 100vh; height: 100dvh;
+      border-radius: 0; border: none;
+    }
+    .H-nav { display: none; }
+    .H-right { display: none; }
+    .H-main { flex: 1; overflow-y: auto; }
+    .H-topbar { padding: 0 14px; height: 44px; }
+    .H-page-head { padding: 12px 14px 8px; }
+    .H-page-head h1 { font-size: 16px; }
+    .H-level-row { padding: 0 14px 8px; gap: 6px; flex-wrap: wrap; }
+    .H-level-pill { width: 22px; height: 22px; font-size: 9px; }
+    .H-level-desc { font-size: 8px; }
+    .H-editor-card { margin: 0 14px; }
+    .H-editor-footer { padding: 8px 12px; }
+    .H-footer-stats { gap: 8px; }
+    .H-ai-pct-bar { margin: 0 14px; }
+    .H-adv-btn { margin: 6px 14px 8px; }
+    .ob-card { width: calc(100vw - 32px); padding: 28px 22px; }
+    .ob-title { font-size: 20px; }
+    .ob-row2 { grid-template-columns: 1fr; }
+    .ob-use-grid { grid-template-columns: 1fr 1fr; }
+    .btn-humanize { padding: 8px 14px; font-size: 10px; letter-spacing: .1em; }
+    .P-account { padding: 0 14px 14px; }
+    .P-plans { padding: 0 14px 14px; }
+    .plans-grid { grid-template-columns: 1fr; }
+    .P-detector { padding: 0 14px 12px; }
+    .det-body { flex-direction: column; }
+    .det-result-col { width: 100%; border-top: 0.5px solid var(--bd); border-right: none; }
+    /* Mobile bottom nav */
+    .H-mobile-nav {
+      display: flex; border-top: 0.5px solid var(--bd);
+      background: rgba(0,0,0,.8); flex-shrink: 0;
+    }
+    .H-mobile-nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 3px; padding: 8px 4px;
+      background: none; border: none; cursor: pointer; transition: all .2s;
+    }
+    .H-mobile-nav-item.active .H-mobile-nav-icon { color: var(--gold-lt); }
+    .H-mobile-nav-item.active .H-mobile-nav-label { color: var(--gold-lt); }
+    .H-mobile-nav-icon { font-size: 16px; color: var(--muted); }
+    .H-mobile-nav-label { font-family: var(--ffm); font-size: 8px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  }
+  @media (min-width: 769px) {
+    .H-mobile-nav { display: none; }
+  }
+  .H::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 70% 45% at 50% -5%,  rgba(201,168,76,0.08) 0%, transparent 65%),
+      radial-gradient(ellipse 40% 30% at 90% 110%, rgba(201,168,76,0.04) 0%, transparent 55%);
+  }
+
+  /* ── ONBOARDING OVERLAY ── */
+  .ob-overlay {
+    position: absolute; inset: 0; z-index: 300;
+    background: rgba(12,11,9,0.97);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    animation: ob-in .4s ease;
+  }
+  @keyframes ob-in { from{opacity:0} to{opacity:1} }
+
+  .ob-card {
+    width: 460px; padding: 44px 42px;
+    background: #0f0e0b;
+    border: 0.5px solid var(--border); border-radius: 12px;
+    position: relative; overflow: hidden;
+    animation: ob-rise .45s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes ob-rise { from{transform:translateY(22px) scale(.96);opacity:0} to{transform:none;opacity:1} }
+  .ob-card::before {
+    content: ''; position: absolute; top:0;left:0;right:0; height:1px;
+    background: linear-gradient(90deg,transparent,var(--gold-line),transparent);
+  }
+  .ob-card::after {
+    content: ''; position: absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(201,168,76,.05), transparent 65%);
+  }
+
+  .ob-gem {
+    width: 54px; height: 54px; border-radius: 50%; margin: 0 auto 22px;
+    background: radial-gradient(circle at 33% 28%, #fffde0, #f5c842 45%, #7a5010);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    animation: gem-glow 2.8s ease-in-out infinite;
+  }
+  @keyframes gem-glow { 0%,100%{box-shadow:0 0 20px rgba(245,200,66,.38)} 50%{box-shadow:0 0 52px rgba(245,200,66,.72),0 0 90px rgba(245,200,66,.18)} }
+
+  .ob-eyebrow { font-family:var(--ffm); font-size:9px; letter-spacing:.3em; color:var(--gold); text-align:center; text-transform:uppercase; margin-bottom:8px; }
+  .ob-title   { font-family:var(--ffd); font-size:26px; font-weight:600; letter-spacing:.08em; color:#fff; text-align:center; margin-bottom:6px; }
+  .ob-sub     { font-family:var(--ffb); font-size:14px; color:var(--muted); text-align:center; line-height:1.7; margin-bottom:30px; }
+
+  .ob-steps { display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:28px; }
+  .ob-step-dot { width:6px; height:6px; border-radius:50%; background:var(--bd); transition:all .3s; }
+  .ob-step-dot.done { background:var(--gold); }
+  .ob-step-dot.active { background:var(--gold-lt); width:18px; border-radius:3px; box-shadow:0 0 8px var(--gold-glow); }
+
+  .ob-form { display:flex; flex-direction:column; gap:14px; }
+  .ob-field { display:flex; flex-direction:column; gap:5px; }
+  .ob-label { font-family:var(--ffm); font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  .ob-input {
+    background: rgba(0,0,0,.5); border: 0.5px solid var(--bd);
+    border-radius: var(--rs); color:var(--text); font-family:var(--ffm);
+    font-size:12px; padding:10px 13px; outline:none; transition:border-color .2s;
+    letter-spacing:.04em;
+  }
+  .ob-input:focus { border-color:var(--border); box-shadow:0 0 0 2px rgba(201,168,76,.08); }
+  .ob-input::placeholder { color:var(--dim); }
+
+  .ob-row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .ob-use-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:2px; }
+  .ob-use-card {
+    border:0.5px solid var(--bd); border-radius:var(--rs); padding:10px 12px;
+    cursor:pointer; transition:all .2s; background:transparent; text-align:left;
+  }
+  .ob-use-card:hover { border-color:var(--border); background:var(--glass); }
+  .ob-use-card.selected { border-color:var(--border); background:var(--gold-dim); }
+  .ob-use-icon { font-size:16px; margin-bottom:5px; }
+  .ob-use-name { font-family:var(--ffm); font-size:10px; color:var(--text); letter-spacing:.06em; }
+  .ob-use-desc { font-family:var(--ffb); font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4; }
+
+  .ob-actions { display:flex; gap:10px; margin-top:6px; }
+  .ob-btn-back {
+    flex:0 0 auto; padding:10px 18px; background:transparent;
+    border:0.5px solid var(--bd); border-radius:var(--rs);
+    font-family:var(--ffd); font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted); cursor:pointer; transition:all .2s;
+  }
+  .ob-btn-back:hover { border-color:var(--border); color:var(--text); }
+  .ob-btn-next {
+    flex:1; padding:12px;
+    background:linear-gradient(90deg,var(--gold-dk),var(--gold) 40%,var(--gold) 60%,var(--gold-dk));
+    background-size:200% 100%;
+    border:none; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:11px; font-weight:600; letter-spacing:.2em; text-transform:uppercase;
+    color:#0c0b09; cursor:pointer; transition:background-position .5s,box-shadow .3s;
+  }
+  .ob-btn-next:hover { background-position:100% 0; box-shadow:0 0 28px var(--gold-glow); }
+  .ob-btn-next:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
+
+  .ob-skip { display:block; text-align:center; margin-top:14px; font-family:var(--ffm); font-size:9px;
+    color:rgba(255,255,255,.18); letter-spacing:.16em; text-transform:uppercase; background:none; border:none; cursor:pointer; transition:color .2s; }
+  .ob-skip:hover { color:rgba(255,255,255,.38); }
+
+  /* ── NAV ── */
+  .H-nav {
+    width: 196px; flex-shrink:0; background:rgba(0,0,0,.52);
+    border-right:0.5px solid var(--bd);
+    display:flex; flex-direction:column; position:relative; z-index:2; overflow:hidden;
+  }
+  .H-nav-logo {
+    padding:16px 15px 13px; border-bottom:0.5px solid var(--bd);
+    display:flex; align-items:center; gap:9px; flex-shrink:0;
+  }
+  .H-nav-gem {
+    width:28px; height:28px; border-radius:6px; flex-shrink:0;
+    background:radial-gradient(circle at 35% 30%,#fffbe0,var(--gold) 50%,var(--gold-dk));
+    display:flex; align-items:center; justify-content:center; font-size:13px;
+    animation:gem-pulse 3s ease-in-out infinite;
+  }
+  @keyframes gem-pulse { 0%,100%{box-shadow:0 0 10px var(--gold-glow)} 50%{box-shadow:0 0 26px rgba(201,168,76,.55)} }
+  .H-nav-brand { font-family:var(--ffd); font-size:11px; font-weight:600; letter-spacing:.12em; color:var(--gold-lt); line-height:1.2; }
+  .H-nav-brand span { display:block; font-size:8px; font-weight:400; color:var(--muted); letter-spacing:.08em; font-family:var(--ffm); margin-top:2px; }
+
+  .H-nav-sec { padding:12px 11px 5px; font-size:8px; letter-spacing:.24em; text-transform:uppercase; color:var(--dim); font-family:var(--ffm); flex-shrink:0; }
+  .H-nav-item {
+    display:flex; align-items:center; gap:9px;
+    padding:8px 12px; margin:1px 7px;
+    border-radius:var(--rs); cursor:pointer;
+    font-family:var(--ffm); font-size:11px; letter-spacing:.05em;
+    color:var(--muted); border:none; background:none; width:calc(100% - 14px);
+    text-align:left; transition:all .2s; flex-shrink:0;
+  }
+  .H-nav-item:hover  { background:var(--glass); color:var(--text); }
+  .H-nav-item.active { background:var(--gold-dim); color:var(--gold-lt); border:0.5px solid var(--bd); }
+  .H-nav-icon { font-size:12px; flex-shrink:0; opacity:.8; }
+
+  .H-nav-footer { margin-top:auto; padding:12px 13px; border-top:0.5px solid var(--bd); flex-shrink:0; }
+  .H-avatar-pill {
+    display:flex; align-items:center; gap:8px;
+    background:var(--glass); border:0.5px solid var(--bd);
+    border-radius:var(--rs); padding:8px 9px; cursor:pointer; transition:all .2s;
+  }
+  .H-avatar-pill:hover { border-color:var(--border); background:var(--gold-dim); }
+  .H-avatar {
+    width:26px; height:26px; border-radius:50%; flex-shrink:0;
+    background:radial-gradient(circle at 35% 30%,var(--gold-lt),var(--gold-dk));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--ffd); font-size:10px; color:#000; font-weight:600;
+  }
+  .H-avatar-info { flex:1; min-width:0; overflow:hidden; }
+  .H-avatar-name { font-size:11px; color:var(--text); font-family:var(--ffm); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .H-avatar-tier { font-size:9px; color:var(--muted); font-family:var(--ffm); letter-spacing:.08em; }
+
+  /* ── MAIN ── */
+  .H-main { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; z-index:1; min-width:0; }
+
+  .H-topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 20px; height:48px; flex-shrink:0;
+    border-bottom:0.5px solid var(--bd); background:rgba(0,0,0,.3);
+  }
+  .H-breadcrumb { font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.1em; display:flex; align-items:center; gap:5px; }
+  .H-breadcrumb em { color:var(--gold-lt); font-style:normal; }
+  .H-uses-badge {
+    font-family:var(--ffm); font-size:10px; letter-spacing:.1em;
+    background:var(--gold-dim); border:0.5px solid var(--bd);
+    border-radius:var(--rs); padding:3px 9px; color:var(--gold);
+  }
+  .H-uses-badge.warn   { color:var(--warn); border-color:rgba(232,160,76,.35); background:rgba(232,160,76,.08); }
+  .H-uses-badge.danger { color:var(--bad);  border-color:rgba(201,90,76,.35);  background:rgba(201,90,76,.08); }
+
+  /* Page header */
+  .H-page-head { padding:14px 20px 10px; flex-shrink:0; }
+  .H-page-head h1 { font-family:var(--ffd); font-size:20px; font-weight:500; letter-spacing:.08em; color:var(--gold-lt); }
+  .H-page-head p  { font-size:13px; color:var(--muted); margin-top:3px; letter-spacing:.03em; line-height:1.5; }
+
+  /* ── LEVEL ROW ── */
+  .H-level-row { display:flex; align-items:center; gap:10px; padding:0 20px 10px; flex-shrink:0; }
+  .H-level-label { font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; flex-shrink:0; }
+  .H-level-pills { display:flex; gap:3px; flex-shrink:0; }
+  .H-level-pill {
+    width:24px; height:24px; border-radius:3px;
+    background:transparent; border:0.5px solid var(--bd);
+    color:var(--muted); font-family:var(--ffm); font-size:10px;
+    cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .H-level-pill:hover  { border-color:var(--border); color:var(--gold); }
+  .H-level-pill.active { background:var(--gold-dim); border-color:var(--border); color:var(--gold-lt); font-weight:500; box-shadow:0 0 8px var(--gold-glow); }
+  .H-level-desc { font-family:var(--ffm); font-size:9px; color:var(--dim); letter-spacing:.08em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ── EDITOR CARD ── */
+  .H-editor-card {
+    margin:0 20px; flex:1; min-height:0;
+    border:0.5px solid var(--border); border-radius:var(--r);
+    background:var(--glass2);
+    display:flex; flex-direction:column; position:relative;
+    box-shadow:inset 0 0 40px rgba(201,168,76,.02),0 0 40px rgba(201,168,76,.03);
+    overflow:hidden;
+  }
+  .H-editor-card::before {
+    content:''; position:absolute; top:0;left:0;right:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold-line),transparent); pointer-events:none;
+  }
+
+  /* Laser */
+  .H-laser { position:absolute;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold) 40%,#fffbe0 50%,var(--gold) 60%,transparent);
+    pointer-events:none;z-index:10;opacity:0;top:0; }
+  .H-laser.go { animation:laser-drop 1.8s ease-in-out forwards; }
+  @keyframes laser-drop { 0%{top:0;opacity:0} 4%{opacity:1} 92%{opacity:.8} 100%{top:100%;opacity:0} }
+
+  /* Tabs */
+  .H-tabs { display:flex; flex-shrink:0; border-bottom:0.5px solid var(--bd); }
+  .H-tab {
+    padding:9px 16px; font-family:var(--ffm); font-size:10px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+    cursor:pointer; border:none; background:none;
+    border-bottom:1.5px solid transparent; transition:all .2s; position:relative; top:.5px;
+  }
+  .H-tab.active { color:var(--gold-lt); border-bottom-color:var(--gold); background:rgba(201,168,76,.04); }
+  .H-tab:hover:not(.active) { color:var(--text); }
+
+  /* Editor body */
+  .H-editor-body { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  textarea.H-textarea {
+    flex:1; width:100%; min-height:0;
+    background:transparent; border:none; outline:none; resize:none;
+    font-family:var(--ffb); font-size:15px; line-height:1.9;
+    color:#c8bca8; padding:16px 18px; caret-color:var(--gold);
+  }
+  textarea.H-textarea::placeholder { color:var(--dim); font-style:italic; }
+  .H-output-scroll { flex:1; overflow-y:auto; min-height:0; position:relative; }
+  .H-output-text { padding:16px 18px; font-family:var(--ffb); font-size:15px; line-height:1.9; color:#e0d4bc; white-space:pre-wrap; }
+  .H-output-empty { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; padding:20px; }
+  .H-output-empty-inner { text-align:center; }
+  .H-output-empty-icon { font-size:26px; opacity:.2; margin-bottom:10px; }
+  .H-output-empty-text { font-size:13px; color:var(--dim); font-style:italic; line-height:1.7; }
+
+  /* ── EDITOR FOOTER — THE FIX ── */
+  .H-editor-footer {
+    flex-shrink: 0;
+    border-top: 0.5px solid var(--bd);
+    background: rgba(0,0,0,.4);
+    padding: 10px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+  }
+  .H-footer-stats { display:flex; align-items:center; gap:14px; overflow:hidden; }
+  .H-footer-btns  { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .H-stat { display:flex; align-items:center; gap:5px; font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.08em; white-space:nowrap; }
+  .H-stat svg { width:12px; height:12px; opacity:.5; flex-shrink:0; }
+  .H-stat.over { color:var(--bad); }
+
+  /* Buttons */
+  .btn-ghost {
+    flex-shrink:0; white-space:nowrap;
+    background:transparent; border:0.5px solid var(--bd);
+    color:var(--muted); font-family:var(--ffm); font-size:10px;
+    letter-spacing:.12em; padding:7px 13px; cursor:pointer;
+    text-transform:uppercase; border-radius:var(--rs); transition:all .2s;
+  }
+  .btn-ghost:hover { border-color:var(--border); color:var(--text); background:var(--glass); }
+
+  .btn-humanize {
+    flex-shrink:0; white-space:nowrap;
+    background:linear-gradient(90deg,var(--gold-dk),var(--gold) 40%,var(--gold) 60%,var(--gold-dk));
+    background-size:200% 100%;
+    border:none; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:11px; font-weight:600;
+    letter-spacing:.16em; text-transform:uppercase;
+    color:#0c0b09; padding:9px 22px; cursor:pointer;
+    transition:background-position .5s,box-shadow .3s;
+  }
+  .btn-humanize:hover:not(:disabled) { background-position:100% 0; box-shadow:0 0 22px var(--gold-glow); }
+  .btn-humanize:disabled { opacity:.35; cursor:not-allowed; }
+  .btn-humanize.busy { animation:btn-gp 1.8s ease-in-out infinite; }
+  @keyframes btn-gp { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 30px rgba(201,168,76,.6)} }
+
+  .H-limit-strip {
+    flex-shrink:0; padding:5px 16px;
+    background:rgba(201,90,76,.06); border-top:0.5px solid rgba(201,90,76,.22);
+    font-size:9px; color:#e09090; text-align:center; font-family:var(--ffm); letter-spacing:.1em;
+  }
+
+  .H-adv-btn {
+    flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:5px;
+    margin:7px 20px 8px; background:none; border:none;
+    font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.12em;
+    text-transform:uppercase; cursor:pointer; transition:color .2s;
+  }
+  .H-adv-btn:hover { color:var(--gold); }
+
+  /* Copy toast */
+  .copy-toast {
+    position:absolute; top:10px; right:10px;
+    background:rgba(201,168,76,.15); border:0.5px solid var(--border);
+    border-radius:var(--rs); padding:4px 12px;
+    font-family:var(--ffm); font-size:10px; color:var(--gold-lt); letter-spacing:.1em;
+    animation:toast-f 2s ease forwards; z-index:20; pointer-events:none;
+  }
+  @keyframes toast-f { 0%{opacity:0;transform:translateY(-4px)} 15%{opacity:1;transform:none} 75%{opacity:1} 100%{opacity:0} }
+
+  /* ── RIGHT PANEL ── */
+  .H-right {
+    width:196px; flex-shrink:0; background:rgba(0,0,0,.42);
+    border-left:0.5px solid var(--bd); display:flex; flex-direction:column;
+    position:relative; z-index:2; overflow-y:auto;
+  }
+  .H-rs { padding:14px 13px; border-bottom:0.5px solid var(--bd); }
+  .H-rs:last-child { border-bottom:none; }
+  .H-rl { font-family:var(--ffm); font-size:8px; letter-spacing:.26em; text-transform:uppercase; color:var(--dim); margin-bottom:11px; }
+
+  /* AI score widget */
+  .H-score-wrap { display:flex; flex-direction:column; align-items:center; gap:9px; }
+  .ring-bg   { fill:none; stroke:var(--bd); }
+  .ring-fill { fill:none; stroke-linecap:round; transition:stroke-dashoffset 1s cubic-bezier(.4,0,.2,1); }
+  .H-ring-label { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .H-ring-num { font-family:var(--ffd); color:#fff; line-height:1; }
+  .H-ring-sub { font-family:var(--ffm); font-size:8px; color:var(--muted); letter-spacing:.1em; margin-top:2px; }
+  .H-score-status { font-family:var(--ffm); font-size:10px; letter-spacing:.1em; text-align:center; }
+  .H-score-hint { font-size:11px; color:var(--muted); text-align:center; font-style:italic; line-height:1.5; font-family:var(--ffb); }
+
+  /* AI percentage in left area below output */
+  .H-ai-pct-bar {
+    margin:0 20px; flex-shrink:0;
+    border:0.5px solid var(--bd); border-top:none;
+    border-radius:0 0 var(--r) var(--r);
+    background:rgba(0,0,0,.3);
+    padding:10px 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .H-ai-pct-label { font-family:var(--ffm); font-size:9px; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; }
+  .H-ai-pct-track { flex:1; height:4px; background:rgba(255,255,255,.06); border-radius:2px; overflow:hidden; }
+  .H-ai-pct-fill  { height:100%; border-radius:2px; transition:width 1s cubic-bezier(.4,0,.2,1); }
+  .H-ai-pct-val   { font-family:var(--ffd); font-size:12px; white-space:nowrap; }
+
+  .btn-scan {
+    width:100%; padding:8px; border-radius:var(--rs);
+    background:var(--glass); border:0.5px solid var(--bd);
+    color:var(--gold); font-family:var(--ffm); font-size:10px;
+    letter-spacing:.14em; text-transform:uppercase; cursor:pointer; transition:all .2s;
+  }
+  .btn-scan:hover  { background:var(--gold-dim); border-color:var(--border); }
+  .btn-scan:disabled { opacity:.35; cursor:not-allowed; }
+
+  /* Right panel plan card */
+  .H-plan-card {
+    background:var(--gold-dim); border:0.5px solid var(--bd);
+    border-radius:var(--rs); padding:11px; display:flex; flex-direction:column; gap:7px;
+  }
+  .H-pc-name { font-family:var(--ffd); font-size:12px; color:var(--gold-lt); letter-spacing:.08em; }
+  .H-pc-tier { font-family:var(--ffm); font-size:9px; color:var(--muted); }
+  .H-pc-row  { display:flex; justify-content:space-between; align-items:center; }
+  .H-pc-lbl  { font-family:var(--ffm); font-size:9px; color:var(--muted); }
+  .H-pc-val  { font-family:var(--ffm); font-size:9px; color:var(--gold); }
+  .H-pc-track { height:2px; background:rgba(255,255,255,.06); border-radius:1px; }
+  .H-pc-fill  { height:2px; border-radius:1px; background:var(--gold); transition:width .6s ease; }
+  .btn-upgrade-sm {
+    width:100%; padding:7px; border-radius:var(--rs);
+    background:linear-gradient(90deg,var(--gold-dk),var(--gold),var(--gold-dk));
+    background-size:200% 100%;
+    border:none; color:#0c0b09; font-family:var(--ffd);
+    font-size:9px; font-weight:600; letter-spacing:.2em; text-transform:uppercase;
+    cursor:pointer; transition:background-position .4s,box-shadow .3s;
+  }
+  .btn-upgrade-sm:hover { background-position:100% 0; box-shadow:0 0 16px var(--gold-glow); }
+
+  /* Metric bar */
+  .H-metric { margin-bottom:11px; }
+  .H-metric:last-child { margin-bottom:0; }
+  .H-metric-hd { display:flex; justify-content:space-between; margin-bottom:5px; }
+  .H-metric-nm { font-family:var(--ffm); font-size:9px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; }
+  .H-metric-vl { font-family:var(--ffm); font-size:10px; }
+  .H-metric-tr { height:2px; background:rgba(255,255,255,.05); border-radius:1px; }
+  .H-metric-fi { height:2px; border-radius:1px; transition:width .9s cubic-bezier(.4,0,.2,1); }
+
+  /* ═══ PAGE VIEWS ═══ */
+
+  /* AI DETECTOR */
+  .P-detector { flex:1; display:flex; flex-direction:column; overflow:hidden; padding:0 20px 12px; }
+  .det-card {
+    flex:1; border:0.5px solid var(--border); border-radius:var(--r);
+    background:var(--glass2); display:flex; flex-direction:column;
+    position:relative; overflow:hidden;
+  }
+  .det-card::before {
+    content:''; position:absolute; top:0;left:0;right:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold-line),transparent); pointer-events:none;
+  }
+  .det-body { flex:1; display:flex; min-height:0; }
+  .det-input-col { flex:1; display:flex; flex-direction:column; border-right:0.5px solid var(--bd); min-width:0; }
+  textarea.det-ta {
+    flex:1; background:transparent; border:none; outline:none; resize:none;
+    font-family:var(--ffb); font-size:15px; line-height:1.9; color:#c8bca8;
+    padding:16px 18px; caret-color:var(--gold); min-height:0;
+  }
+  textarea.det-ta::placeholder { color:var(--dim); font-style:italic; }
+  .det-result-col {
+    width:200px; flex-shrink:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; padding:18px 14px;
+  }
+  .det-verdict { font-family:var(--ffd); font-size:13px; letter-spacing:.1em; text-align:center; }
+  .det-hint    { font-family:var(--ffb); font-size:12px; color:var(--muted); text-align:center; font-style:italic; line-height:1.6; }
+  .det-bk { width:100%; display:flex; flex-direction:column; gap:8px; }
+  .det-bk-row { display:flex; flex-direction:column; gap:4px; }
+  .det-bk-hd  { display:flex; justify-content:space-between; }
+  .det-bk-lbl { font-family:var(--ffm); font-size:9px; color:var(--muted); letter-spacing:.08em; }
+  .det-bk-val { font-family:var(--ffm); font-size:9px; }
+  .det-bk-tr  { height:2px; background:rgba(255,255,255,.05); border-radius:1px; }
+  .det-bk-fi  { height:2px; border-radius:1px; transition:width .9s ease; }
+  .det-footer {
+    flex-shrink:0; border-top:0.5px solid var(--bd); background:rgba(0,0,0,.35);
+    padding:10px 16px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .det-wc { font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.08em; }
+  .btn-detect {
+    background:linear-gradient(135deg,var(--gold-dk),var(--gold) 50%,var(--gold-dk));
+    background-size:200% 100%; border:none; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:11px; font-weight:500; letter-spacing:.16em; text-transform:uppercase;
+    color:#0c0b09; padding:9px 20px; cursor:pointer; transition:background-position .5s,box-shadow .3s;
+    white-space:nowrap; flex-shrink:0;
+  }
+  .btn-detect:hover:not(:disabled) { background-position:100% 0; box-shadow:0 0 22px var(--gold-glow); }
+  .btn-detect:disabled { opacity:.35; cursor:not-allowed; }
+
+  /* ACCOUNT */
+  .P-account { flex:1; overflow-y:auto; padding:0 20px 16px; display:flex; flex-direction:column; gap:12px; }
+  .acct-card {
+    border:0.5px solid var(--bd); border-radius:var(--r);
+    background:var(--glass2); padding:18px;
+    position:relative; overflow:hidden; flex-shrink:0;
+  }
+  .acct-card::before {
+    content:''; position:absolute; top:0;left:0;right:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold-line),transparent); pointer-events:none;
+  }
+  .acct-title { font-family:var(--ffd); font-size:10px; font-weight:500; letter-spacing:.2em; color:var(--gold); text-transform:uppercase; margin-bottom:14px; }
+  .acct-avatar-row { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .acct-avatar {
+    width:52px; height:52px; border-radius:50%; flex-shrink:0;
+    background:radial-gradient(circle at 35% 30%,var(--gold-lt),var(--gold-dk));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--ffd); font-size:18px; color:#000; font-weight:600;
+    border:0.5px solid var(--border); box-shadow:0 0 18px var(--gold-glow);
+  }
+  .acct-user h2 { font-family:var(--ffd); font-size:14px; color:var(--gold-lt); letter-spacing:.06em; }
+  .acct-user p  { font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.06em; margin-top:3px; word-break:break-all; }
+  .acct-fields { display:flex; flex-direction:column; gap:11px; }
+  .acct-field  { display:flex; flex-direction:column; gap:4px; }
+  .acct-field label { font-family:var(--ffm); font-size:9px; color:var(--muted); letter-spacing:.16em; text-transform:uppercase; }
+  .acct-field input {
+    background:rgba(0,0,0,.42); border:0.5px solid var(--bd); border-radius:var(--rs);
+    color:var(--text); font-family:var(--ffm); font-size:12px; padding:9px 11px;
+    outline:none; transition:border-color .2s; letter-spacing:.04em; width:100%;
+  }
+  .acct-field input:focus { border-color:var(--border); }
+  .acct-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .acct-stat { background:rgba(0,0,0,.3); border:0.5px solid var(--bd); border-radius:var(--rs); padding:11px 12px; }
+  .acct-stat-num { font-family:var(--ffd); font-size:20px; color:var(--gold-lt); font-weight:400; line-height:1; }
+  .acct-stat-lbl { font-family:var(--ffm); font-size:9px; color:var(--muted); letter-spacing:.1em; margin-top:4px; }
+  .acct-save-row { display:flex; justify-content:flex-end; margin-top:6px; }
+  .btn-save {
+    background:linear-gradient(135deg,var(--gold-dk),var(--gold) 50%,var(--gold-dk));
+    background-size:200% 100%; border:none; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:10px; font-weight:500; letter-spacing:.16em; text-transform:uppercase;
+    color:#0c0b09; padding:9px 20px; cursor:pointer; transition:background-position .5s,box-shadow .3s;
+  }
+  .btn-save:hover { background-position:100% 0; box-shadow:0 0 18px var(--gold-glow); }
+
+  /* PLANS */
+  .P-plans { flex:1; overflow-y:auto; padding:0 20px 16px; display:flex; flex-direction:column; gap:12px; }
+  .plans-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; flex-shrink:0; }
+  .plan-card {
+    border:0.5px solid var(--bd); border-radius:var(--r);
+    background:var(--glass2); padding:18px 16px;
+    display:flex; flex-direction:column; gap:12px;
+    position:relative; overflow:hidden; transition:border-color .3s;
+  }
+  .plan-card.featured { border-color:var(--border); }
+  .plan-card::before {
+    content:''; position:absolute; top:0;left:0;right:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold-line),transparent);
+    pointer-events:none; opacity:0; transition:opacity .3s;
+  }
+  .plan-card.featured::before { opacity:1; }
+  .plan-badge {
+    position:absolute; top:10px; right:10px;
+    font-family:var(--ffm); font-size:8px; letter-spacing:.18em; text-transform:uppercase;
+    background:var(--gold-dim); border:0.5px solid var(--border); border-radius:2px;
+    color:var(--gold); padding:2px 7px;
+  }
+  .plan-name { font-family:var(--ffd); font-size:14px; color:var(--gold-lt); letter-spacing:.1em; }
+  .plan-price { display:flex; align-items:baseline; gap:4px; }
+  .plan-price-num { font-family:var(--ffd); font-size:28px; color:#fff; font-weight:400; }
+  .plan-price-per { font-family:var(--ffm); font-size:10px; color:var(--muted); letter-spacing:.08em; }
+  .plan-feats { display:flex; flex-direction:column; gap:6px; flex:1; }
+  .plan-feat { display:flex; align-items:flex-start; gap:7px; font-size:12px; color:rgba(232,220,200,.6); line-height:1.4; font-family:var(--ffb); }
+  .plan-feat-dot { width:3px; height:3px; border-radius:50%; background:var(--gold); flex-shrink:0; margin-top:5px; }
+  .plan-feat.dim { color:var(--muted); }
+  .plan-feat.dim .plan-feat-dot { background:var(--dim); }
+  .btn-plan {
+    width:100%; padding:9px; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:10px; font-weight:500; letter-spacing:.18em; text-transform:uppercase; cursor:pointer; transition:all .3s;
+  }
+  .btn-plan-curr { background:transparent; border:0.5px solid var(--bd); color:var(--muted); cursor:default; }
+  .btn-plan-gold {
+    background:linear-gradient(90deg,var(--gold-dk),var(--gold) 40%,var(--gold) 60%,var(--gold-dk));
+    background-size:200% 100%; border:none; color:#0c0b09;
+  }
+  .btn-plan-gold:hover { background-position:100% 0; box-shadow:0 0 24px var(--gold-glow); }
+  .cmp-table { border:0.5px solid var(--bd); border-radius:var(--r); overflow:hidden; flex-shrink:0; }
+  .cmp-row { display:flex; border-bottom:0.5px solid var(--bd); }
+  .cmp-row:last-child { border-bottom:none; }
+  .cmp-row.hd { background:rgba(201,168,76,.06); }
+  .cmp-cell { flex:1; padding:9px 12px; font-family:var(--ffm); font-size:10px; letter-spacing:.06em; color:var(--muted); border-right:0.5px solid var(--bd); }
+  .cmp-cell:last-child { border-right:none; }
+  .cmp-row.hd .cmp-cell { color:var(--gold-lt); font-size:9px; letter-spacing:.18em; text-transform:uppercase; }
+  .cmp-cell.yes { color:var(--ok); }
+  .cmp-cell.no  { color:var(--dim); }
+
+  /* ── GOLD MODAL ── */
+  .H-modal-overlay {
+    position:absolute; inset:0; background:rgba(0,0,0,.92);
+    display:flex; align-items:center; justify-content:center;
+    z-index:200; border-radius:12px; animation:fade-in .3s ease;
+  }
+  @keyframes fade-in { from{opacity:0} to{opacity:1} }
+  .H-modal {
+    background:#090807; border:0.5px solid rgba(201,168,76,.5);
+    border-radius:10px; padding:34px 30px;
+    width:370px; position:relative; overflow:hidden;
+    animation:modal-r .36s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes modal-r { from{transform:translateY(18px) scale(.95);opacity:0} to{transform:none;opacity:1} }
+  .H-modal::before { content:''; position:absolute; top:0;left:0;right:0; height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); }
+  .H-modal::after  { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 80% 40% at 50% 0%,rgba(201,168,76,.06),transparent 60%); pointer-events:none; }
+  .H-modal-gem {
+    width:48px; height:48px; border-radius:50%; margin:0 auto 16px;
+    background:radial-gradient(circle at 32% 28%,#fffde0,#f5c842 45%,#7a5010);
+    animation:gem-glow 2.4s ease-in-out infinite;
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  .H-modal-eyebrow { font-family:var(--ffm); font-size:8px; letter-spacing:.3em; color:var(--gold); text-align:center; text-transform:uppercase; margin-bottom:6px; }
+  .H-modal-title   { font-family:var(--ffd); font-size:20px; font-weight:500; letter-spacing:.08em; color:#fff; text-align:center; margin-bottom:6px; }
+  .H-modal-sub     { font-size:12px; color:rgba(255,255,255,.35); text-align:center; line-height:1.7; margin-bottom:18px; }
+  .H-modal-price   { text-align:center; padding:14px; background:rgba(201,168,76,.06); border:0.5px solid rgba(201,168,76,.22); border-radius:var(--rs); margin-bottom:16px; }
+  .H-modal-price-num { font-family:var(--ffd); font-size:36px; color:var(--gold-lt); font-weight:400; line-height:1; }
+  .H-modal-price-per { font-family:var(--ffm); font-size:10px; color:rgba(201,168,76,.55); letter-spacing:.12em; margin-top:4px; }
+  .H-modal-feats   { display:flex; flex-direction:column; gap:6px; margin-bottom:18px; }
+  .H-modal-feat    { display:flex; align-items:flex-start; gap:9px; font-size:12px; color:rgba(255,255,255,.5); line-height:1.5; font-family:var(--ffb); }
+  .H-feat-dot      { width:3px; height:3px; border-radius:50%; background:var(--gold); flex-shrink:0; margin-top:5px; }
+  .btn-modal-up {
+    width:100%; padding:12px;
+    background:linear-gradient(90deg,var(--gold-dk),var(--gold) 40%,var(--gold) 60%,var(--gold-dk));
+    background-size:200% 100%; border:none; border-radius:var(--rs);
+    font-family:var(--ffd); font-size:11px; font-weight:600; letter-spacing:.22em; text-transform:uppercase;
+    color:#0c0b09; cursor:pointer; transition:background-position .5s,box-shadow .3s;
+  }
+  .btn-modal-up:hover { background-position:100% 0; box-shadow:0 0 34px rgba(201,168,76,.4); }
+  .btn-modal-dis {
+    display:block; width:100%; text-align:center; background:none; border:none;
+    margin-top:11px; font-family:var(--ffm); font-size:9px;
+    color:rgba(255,255,255,.18); letter-spacing:.16em; text-transform:uppercase; cursor:pointer; transition:color .2s;
+  }
+  .btn-modal-dis:hover { color:rgba(255,255,255,.38); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:3px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--dim); border-radius:2px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+`;
+
+/* ═══════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════ */
+// ── STRIPE ──────────────────────────────────────────────────
+// Product ID: prod_UOxAmWMZGK8Gz0
+// Replace STRIPE_CHECKOUT_URL with your actual Stripe Payment
+// Link or Checkout Session URL from your Stripe Dashboard.
+// e.g. "https://buy.stripe.com/your-payment-link"
+const STRIPE_PRODUCT_ID   = "prod_UOxAmWMZGK8Gz0";
+const STRIPE_CHECKOUT_URL = "https://buy.stripe.com/5kQ7sN6Mz0HZ7wd0oK3VC00";
+// ────────────────────────────────────────────────────────────
+
+const WORD_LIMIT = 300;
+const FREE_USES  = 10;
+const LEVEL_DESCS = {
+  1:"Subtle touch",2:"Light shift",3:"Moderate",4:"Noticeable",5:"Clear rewrite",
+  6:"Strong rewrite",7:"Heavy rewrite",8:"Max variation",9:"Deep transform",10:"Full rewrite"
+};
+const MODAL_FEATS = [
+  "Unlimited words — no 300-word cap",
+  "Unlimited humanizations per day",
+  "Advanced models (Ghost 5.1 updated)",
+  "AI detection scoring & full reports",
+  "Priority queue & API access",
+];
+const FREE_FEATS = ["10 humanizations/month","300-word limit","Ghost 4.6 model","Standard queue"];
+const GOLD_FEATS = ["Unlimited humanizations","No word limit","Ghost 5.1 (updated)","AI detector included","Priority queue","API access"];
+const CMP = [
+  ["Feature","Free","Gold"],
+  ["Humanizations/day","5","Unlimited"],
+  ["Word limit","300","Unlimited"],
+  ["Model","Ghost 4.6","Ghost 5.1"],
+  ["AI Detector","—","✓"],
+  ["API access","—","✓"],
+  ["Priority queue","—","✓"],
+];
+const USE_CASES = [
+  { id:"student",    icon:"🎓", name:"Student",     desc:"Essays & assignments" },
+  { id:"blogger",    icon:"✍️", name:"Blogger",     desc:"Articles & content" },
+  { id:"marketer",   icon:"📈", name:"Marketer",    desc:"Copy & campaigns" },
+  { id:"researcher", icon:"🔬", name:"Researcher",  desc:"Papers & reports" },
+];
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════ */
+function wc(t) { return t.trim() ? t.trim().split(/\s+/).length : 0; }
+
+function calcMetrics(text) {
+  if (!text.trim()) return { entropy:0, fluency:0, burstiness:0 };
+  const words = text.trim().split(/\s+/);
+  const sents = text.split(/[.!?]+/).filter(s=>s.trim().length>2);
+  const unique = new Set(words.map(w=>w.toLowerCase().replace(/[^a-z]/g,"")));
+  const lens   = sents.map(s=>s.trim().split(/\s+/).length);
+  const avg    = lens.length ? lens.reduce((a,b)=>a+b,0)/lens.length : 0;
+  const vari   = lens.length>1 ? Math.sqrt(lens.map(l=>Math.pow(l-avg,2)).reduce((a,b)=>a+b,0)/(lens.length-1)) : 0;
+  return {
+    entropy:    Math.min(100,Math.round((unique.size/words.length)*115)),
+    fluency:    Math.min(100,Math.round(55+(sents.length>3?20:0)+(unique.size/words.length>0.6?22:0))),
+    burstiness: Math.min(100,Math.round(vari*9)),
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SUB-COMPONENTS
+═══════════════════════════════════════════════════════════ */
+function ScoreRing({ score, size=78, sw=5 }) {
+  const r = (size/2)-sw, circ = 2*Math.PI*r;
+  const pct   = score==null ? 0 : score/100;
+  const color = score==null ? "var(--bd)" : score<40 ? "var(--ok)" : score<70 ? "var(--warn)" : "var(--bad)";
+  const lbl   = score==null ? "—" : score<40 ? "Human" : score<70 ? "Mixed" : "AI";
+  return (
+    <div style={{position:"relative",width:size,height:size}}>
+      <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+        <circle className="ring-bg" cx={size/2} cy={size/2} r={r} strokeWidth={sw}/>
+        <circle className="ring-fill" cx={size/2} cy={size/2} r={r} strokeWidth={sw}
+          stroke={color} strokeDasharray={circ} strokeDashoffset={circ*(1-pct)}/>
+      </svg>
+      <div className="H-ring-label">
+        <div className="H-ring-num" style={{color,fontSize:size<90?17:26}}>{score==null?"—":score}</div>
+        <div className="H-ring-sub">{lbl}</div>
+      </div>
+    </div>
+  );
+}
+
+function MetricBar({ name, value, color }) {
+  return (
+    <div className="H-metric">
+      <div className="H-metric-hd">
+        <span className="H-metric-nm">{name}</span>
+        <span className="H-metric-vl" style={{color}}>{value}%</span>
+      </div>
+      <div className="H-metric-tr"><div className="H-metric-fi" style={{width:`${value}%`,background:color}}/></div>
+    </div>
+  );
+}
+
+function GoldModal({ onDismiss, onUpgrade }) {
+  return (
+    <div className="H-modal-overlay" onClick={e=>e.target===e.currentTarget&&onDismiss()}>
+      <div className="H-modal">
+        <div className="H-modal-gem">✦</div>
+        <div className="H-modal-eyebrow">Upgrade Required</div>
+        <div className="H-modal-title">Humanizer Gold</div>
+        <div className="H-modal-sub">You've used all {FREE_USES} free humanizations.<br/>Unlock unlimited access to the full suite.</div>
+        <div className="H-modal-price">
+          <div className="H-modal-price-num">€19.99</div>
+          <div className="H-modal-price-per">per month · cancel anytime</div>
+        </div>
+        <div className="H-modal-feats">
+          {MODAL_FEATS.map((f,i)=><div key={i} className="H-modal-feat"><span className="H-feat-dot"/>{f}</div>)}
+        </div>
+        <button className="btn-modal-up" onClick={onUpgrade}>Activate Gold Plan →</button>
+        <button className="btn-modal-dis" onClick={onDismiss}>Continue as free · 0 uses remaining</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ONBOARDING (3 steps)
+═══════════════════════════════════════════════════════════ */
+function Onboarding({ onComplete }) {
+  const [step,    setStep]    = useState(0);
+  const [profile, setProfile] = useState({ firstName:"", lastName:"", email:"", password:"", useCase:"" });
+
+  const set = (k,v) => setProfile(p=>({...p,[k]:v}));
+
+  const canNext = [
+    profile.firstName.trim() && profile.lastName.trim() && profile.email.trim() && profile.password.length>=6,
+    !!profile.useCase,
+    true,
+  ][step];
+
+  const next = () => { if(step<2) setStep(s=>s+1); else onComplete(profile); };
+  const back = () => setStep(s=>s-1);
+
+  return (
+    <div className="ob-overlay">
+      <div className="ob-card">
+        <div className="ob-gem">✦</div>
+        <div className="ob-eyebrow">Welcome to Aurum AI</div>
+
+        {step===0 && <>
+          <div className="ob-title">Create your account</div>
+          <div className="ob-sub">Set up your profile to start humanizing AI-generated text with precision.</div>
+          <div className="ob-steps">
+            <div className="ob-step-dot active"/>
+            <div className="ob-step-dot"/>
+            <div className="ob-step-dot"/>
+          </div>
+          <div className="ob-form">
+            <div className="ob-row2">
+              <div className="ob-field">
+                <label className="ob-label">First Name</label>
+                <input className="ob-input" placeholder="Youssef" value={profile.firstName} onChange={e=>set("firstName",e.target.value)}/>
+              </div>
+              <div className="ob-field">
+                <label className="ob-label">Last Name</label>
+                <input className="ob-input" placeholder="Kouti" value={profile.lastName} onChange={e=>set("lastName",e.target.value)}/>
+              </div>
+            </div>
+            <div className="ob-field">
+              <label className="ob-label">Email Address</label>
+              <input className="ob-input" type="email" placeholder="you@example.com" value={profile.email} onChange={e=>set("email",e.target.value)}/>
+            </div>
+            <div className="ob-field">
+              <label className="ob-label">Password (min. 6 characters)</label>
+              <input className="ob-input" type="password" placeholder="••••••••" value={profile.password} onChange={e=>set("password",e.target.value)}/>
+            </div>
+            <div className="ob-actions">
+              <button className="ob-btn-next" onClick={next} disabled={!canNext}>Continue →</button>
+            </div>
+          </div>
+          <button className="ob-skip" onClick={()=>onComplete({firstName:"Guest",lastName:"",email:"",password:"",useCase:""})}>Skip for now</button>
+        </>}
+
+        {step===1 && <>
+          <div className="ob-title">How will you use it?</div>
+          <div className="ob-sub">Helps us personalise your experience and suggest the right settings.</div>
+          <div className="ob-steps">
+            <div className="ob-step-dot done"/>
+            <div className="ob-step-dot active"/>
+            <div className="ob-step-dot"/>
+          </div>
+          <div className="ob-use-grid">
+            {USE_CASES.map(u=>(
+              <button key={u.id} className={`ob-use-card${profile.useCase===u.id?" selected":""}`} onClick={()=>set("useCase",u.id)}>
+                <div className="ob-use-icon">{u.icon}</div>
+                <div className="ob-use-name">{u.name}</div>
+                <div className="ob-use-desc">{u.desc}</div>
+              </button>
+            ))}
+          </div>
+          <div className="ob-actions" style={{marginTop:16}}>
+            <button className="ob-btn-back" onClick={back}>Back</button>
+            <button className="ob-btn-next" onClick={next} disabled={!canNext}>Continue →</button>
+          </div>
+        </>}
+
+        {step===2 && <>
+          <div className="ob-title">You're all set ✦</div>
+          <div className="ob-sub">Your workspace is ready. You have {FREE_USES} free humanizations to start with.<br/>Upgrade anytime for unlimited access.</div>
+          <div className="ob-steps">
+            <div className="ob-step-dot done"/>
+            <div className="ob-step-dot done"/>
+            <div className="ob-step-dot active"/>
+          </div>
+          <div style={{background:"var(--gold-dim)",border:"0.5px solid var(--bd)",borderRadius:"var(--r)",padding:"16px 18px",marginBottom:6}}>
+            {[
+              {icon:"✦",label:`${FREE_USES} free humanizations included`},
+              {icon:"◎",label:"AI detection scoring ready"},
+              {icon:"◈",label:`Signed in as ${profile.firstName} ${profile.lastName}`.trim()},
+            ].map((r,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:i<2?"0.5px solid var(--bd)":"none"}}>
+                <span style={{color:"var(--gold)",fontSize:13,flexShrink:0}}>{r.icon}</span>
+                <span style={{fontFamily:"var(--ffm)",fontSize:11,color:"var(--text)",letterSpacing:".05em"}}>{r.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="ob-actions" style={{marginTop:16}}>
+            <button className="ob-btn-back" onClick={back}>Back</button>
+            <button className="ob-btn-next" onClick={next}>Launch App →</button>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE: DETECTOR
+═══════════════════════════════════════════════════════════ */
+function DetectorPage({ handleAiScan }) {
+  const [text,    setText]    = useState("");
+  const [score,   setScore]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [bk,      setBk]      = useState(null);
+
+  const run = async () => {
+    if (!text.trim()||loading) return;
+    setLoading(true); setScore(null); setBk(null);
+
+    /* ══ handleAiScan: fill in your backend logic here ════════════════
+       Receives : text (string)
+       Returns  : number 0–100  OR  { score, breakdown:{ perplexity, burstiness, patternMatch } }
+    ══════════════════════════════════════════════════════════════════ */
+
+    setTimeout(()=>{ setScore(null); setBk(null); setLoading(false); }, 1400);
   };
 
-  // Helper: get user from DB
-  async function getUser(email) {
-    const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
-      { headers }
-    );
-    const users = await resp.json();
-    return users[0] || null;
-  }
+  const sc = score==null?"var(--muted)":score<40?"var(--ok)":score<70?"var(--warn)":"var(--bad)";
+  const vd = score==null?"Awaiting scan":score<40?"Looks Human":score<70?"Partially AI":"Detected as AI";
 
-  // Helper: check if uses should reset (new month)
-  function shouldResetUses(user) {
-    if (!user.updated_at) return false;
-    const lastUpdate = new Date(user.updated_at);
-    const now = new Date();
-    return lastUpdate.getMonth() !== now.getMonth() ||
-           lastUpdate.getFullYear() !== now.getFullYear();
-  }
-
-  // GET — fetch user data
-  if (req.method === 'GET') {
-    const user = await getUser(email);
-    if (!user) return res.status(200).json({ exists: false });
-
-    // Auto-reset uses if new month
-    if (user.plan !== 'gold' && shouldResetUses(user)) {
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
-        {
-          method: 'PATCH',
-          headers: { ...headers, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ uses_count: 0, updated_at: new Date().toISOString() })
-        }
-      );
-      user.uses_count = 0;
-    }
-
-    return res.status(200).json({ exists: true, ...user });
-  }
-
-  // POST
-  if (req.method === 'POST') {
-
-    // Register new user
-    if (action === 'register') {
-      await fetch(`${SUPABASE_URL}/rest/v1/users`, {
-        method: 'POST',
-        headers: { ...headers, 'Prefer': 'resolution=ignore-duplicates' },
-        body: JSON.stringify({
-          email: email.toLowerCase(),
-          first_name: firstName || '',
-          last_name: lastName || '',
-          plan: 'free',
-          uses_count: 0,
-          updated_at: new Date().toISOString()
-        })
-      });
-      const user = await getUser(email);
-      return res.status(200).json({ exists: true, ...(user || {}) });
-    }
-
-    // Increment uses
-    if (action === 'increment') {
-      const user = await getUser(email);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-
-      // Auto-reset if new month
-      let usesCount = user.uses_count || 0;
-      if (user.plan !== 'gold' && shouldResetUses(user)) {
-        usesCount = 0;
-      }
-
-      // Check limit
-      if (user.plan !== 'gold' && usesCount >= FREE_LIMIT) {
-        return res.status(403).json({ error: 'limit_reached', plan: user.plan });
-      }
-
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
-        {
-          method: 'PATCH',
-          headers: { ...headers, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            uses_count: usesCount + 1,
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-      return res.status(200).json({ uses_count: usesCount + 1, plan: user.plan });
-    }
-  }
-
-  res.status(400).json({ error: 'Invalid request' });
+  return (
+    <div className="P-detector">
+      <div className="det-card">
+        <div className="det-body">
+          <div className="det-input-col">
+            <textarea className="det-ta" value={text} onChange={e=>setText(e.target.value)}
+              placeholder="Paste any text here to receive an AI probability score and linguistic breakdown…"/>
+          </div>
+          <div className="det-result-col">
+            <ScoreRing score={score} size={100} sw={6}/>
+            <div className="det-verdict" style={{color:sc}}>{vd}</div>
+            {score==null&&!loading&&<div className="det-hint">Run a scan to see the AI probability and full breakdown.</div>}
+            {bk&&(
+              <div className="det-bk">
+                {[{l:"Perplexity",v:bk.perplexity,c:"var(--gold)"},{l:"Burstiness",v:bk.burstiness,c:"var(--warn)"},{l:"Pattern",v:bk.patternMatch,c:"var(--bad)"}].map(r=>(
+                  <div key={r.l} className="det-bk-row">
+                    <div className="det-bk-hd"><span className="det-bk-lbl">{r.l}</span><span className="det-bk-val" style={{color:r.c}}>{r.v}%</span></div>
+                    <div className="det-bk-tr"><div className="det-bk-fi" style={{width:`${r.v}%`,background:r.c}}/></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="det-footer">
+          <span className="det-wc">{wc(text)} words</span>
+          <button className="btn-detect" onClick={run} disabled={!text.trim()||loading}>
+            {loading?"Scanning…":"◎ Check for AI"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE: ACCOUNT
+═══════════════════════════════════════════════════════════ */
+function AccountPage({ user, usedCount }) {
+  return (
+    <div className="P-account">
+      <div className="acct-card">
+        <div className="acct-title">Profile</div>
+        <div className="acct-avatar-row">
+          <div className="acct-avatar">
+            {(user.firstName?.[0]||"G")}{(user.lastName?.[0]||"")}
+          </div>
+          <div className="acct-user">
+            <h2>{user.firstName} {user.lastName}</h2>
+            <p>{user.email||"No email set"}</p>
+          </div>
+        </div>
+        <div className="acct-fields">
+          <div className="acct-grid">
+            <div className="acct-field"><label>First Name</label><input defaultValue={user.firstName}/></div>
+            <div className="acct-field"><label>Last Name</label><input defaultValue={user.lastName}/></div>
+          </div>
+          <div className="acct-field"><label>Email</label><input defaultValue={user.email} type="email"/></div>
+        </div>
+        <div className="acct-save-row"><button className="btn-save">Save Changes</button></div>
+      </div>
+
+      <div className="acct-card">
+        <div className="acct-title">Usage This Session</div>
+        <div className="acct-grid">
+          {[
+            {num:usedCount,    lbl:"Humanizations used"},
+            {num:FREE_USES-usedCount, lbl:"Uses remaining"},
+            {num:usedCount*Math.round(100+Math.random()*200), lbl:"Words processed"},
+            {num:"Free",       lbl:"Current plan"},
+          ].map(s=>(
+            <div key={s.lbl} className="acct-stat">
+              <div className="acct-stat-num">{s.num}</div>
+              <div className="acct-stat-lbl">{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="acct-card">
+        <div className="acct-title">Security</div>
+        <div className="acct-fields">
+          <div className="acct-field"><label>Current Password</label><input type="password" placeholder="••••••••"/></div>
+          <div className="acct-field"><label>New Password</label><input type="password" placeholder="••••••••"/></div>
+        </div>
+        <div className="acct-save-row"><button className="btn-save">Update Password</button></div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE: PLANS
+═══════════════════════════════════════════════════════════ */
+function PlansPage({ onUpgrade }) {
+  return (
+    <div className="P-plans">
+      <div className="plans-grid">
+        <div className="plan-card">
+          <div className="plan-name">Free</div>
+          <div className="plan-price"><span className="plan-price-num">€0</span><span className="plan-price-per">/month</span></div>
+          <div className="plan-feats">
+            {FREE_FEATS.map((f,i)=><div key={i} className={`plan-feat${i>1?" dim":""}`}><span className="plan-feat-dot"/>{f}</div>)}
+          </div>
+          <button className="btn-plan btn-plan-curr" disabled>Current Plan</button>
+        </div>
+        <div className="plan-card featured">
+          <div className="plan-badge">Recommended</div>
+          <div className="plan-name" style={{color:"var(--gold-lt)"}}>Gold</div>
+          <div className="plan-price"><span className="plan-price-num" style={{color:"var(--gold-lt)"}}>€19.99</span><span className="plan-price-per">/month</span></div>
+          <div className="plan-feats">
+            {GOLD_FEATS.map((f,i)=><div key={i} className="plan-feat"><span className="plan-feat-dot"/>{f}</div>)}
+          </div>
+          <button className="btn-plan btn-plan-gold" onClick={onUpgrade}>Upgrade to Gold →</button>
+        </div>
+      </div>
+      <div className="cmp-table">
+        {CMP.map((row,ri)=>(
+          <div key={ri} className={`cmp-row${ri===0?" hd":""}`}>
+            {row.map((cell,ci)=>(
+              <div key={ci} className={`cmp-cell${ci>0&&ri>0?(cell==="✓"||cell==="Unlimited"?" yes":cell==="—"?" no":""):""}`}>{cell}</div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN APP
+═══════════════════════════════════════════════════════════ */
+function HumanizerDashboard() {
+  // Load cached user from localStorage
+  const cachedEmail = (() => { try { return localStorage.getItem('aurum_email')||null; } catch(e){return null;} })();
+  const cachedUser  = (() => { try { return JSON.parse(localStorage.getItem('aurum_user_data')||'null'); } catch(e){return null;} })();
+
+  const [onboarded,  setOnboarded]  = useState(!!cachedUser);
+  const [user,       setUser]       = useState(cachedUser || { firstName:"", lastName:"", email:"", useCase:"", plan:"free" });
+  const [dbLoading,  setDbLoading]  = useState(!!cachedEmail && !cachedUser);
+  const [view,       setView]       = useState("humanizer");
+  const [inputText,  setInputText]  = useState("");
+  const [outputText, setOutputText] = useState("");
+  const [activeTab,  setActiveTab]  = useState("input");
+  const [level,      setLevel]      = useState(8);
+  const [usesLeft,   setUsesLeft]   = useState(FREE_USES);
+  const [usedCount,  setUsedCount]  = useState(0);
+  const [processing, setProcessing] = useState(false);
+  const [showModal,  setShowModal]  = useState(false);
+  const [aiScore,    setAiScore]    = useState(null);   // for right panel
+  const [outputAiPct,setOutputAiPct]= useState(null);   // shown in the editor after humanize
+  const [scanning,   setScanning]   = useState(false);
+  const [metrics,    setMetrics]    = useState(calcMetrics(""));
+  const [copyToast,  setCopyToast]  = useState(false);
+
+  const laserRef = useRef(null);
+  const wordCount  = wc(inputText);
+  const overLimit  = wordCount > WORD_LIMIT;
+  const isGold = user.plan === 'gold';
+  const canHumanize = (isGold || (!overLimit && usesLeft>0)) && inputText.trim().length>0 && !processing;
+  const badgeClass  = usesLeft<=1?"danger":usesLeft<=2?"warn":"";
+  const usagePct    = ((FREE_USES-usesLeft)/FREE_USES)*100;
+  const scoreColor  = aiScore==null?"var(--muted)":aiScore<40?"var(--ok)":aiScore<70?"var(--warn)":"var(--bad)";
+
+  useEffect(()=>{ setMetrics(calcMetrics(inputText)); },[inputText]);
+
+  // Load user from DB on mount if email cached
+  useEffect(()=>{
+    if (!cachedEmail) return;
+    fetch(`/api/user?email=${encodeURIComponent(cachedEmail)}`)
+      .then(r=>r.json())
+      .then(data=>{
+        if (data.exists) {
+          const plan = data.plan || 'free';
+          const usesCount = data.uses_count || 0;
+          const usesRemaining = plan === 'gold' ? 999 : Math.max(0, FREE_USES - usesCount);
+          const userData = { firstName: data.first_name||'', lastName: data.last_name||'', email: data.email, useCase:'', plan };
+          setUser(userData);
+          setUsesLeft(usesRemaining);
+          setUsedCount(usesCount);
+          setOnboarded(true);
+          // Update local cache with latest data
+          try { localStorage.setItem('aurum_user_data', JSON.stringify(userData)); } catch(e){}
+        }
+        setDbLoading(false);
+      })
+      .catch(()=>{
+        // If DB fails, use cached data
+        if (cachedUser) setOnboarded(true);
+        setDbLoading(false);
+      });
+  },[]);
+
+  /* ══════════════════════════════════════════════════════════
+     handleTransform — FILL IN YOUR BACKEND LOGIC HERE
+     ─────────────────────────────────────────────────────────
+     Receives : text  (string)  — raw input
+                level (number)  — rewrite intensity 1-10
+     Returns  : Promise<string> — the humanized output
+                OR Promise<{ text:string, aiPct:number }> — text + AI% to show in the bar
+  ══════════════════════════════════════════════════════════ */
+  const handleTransform = useCallback(async (text, level) => {
+    try {
+      const response = await fetch("/api/humanize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, level })
+      });
+      const data = await response.json();
+      // Preserve original language — pass detected lang back
+      return { text: data.text || text, aiPct: data.aiPct ?? 0 };
+    } catch (err) {
+      console.error("Humanize error:", err);
+      return { text, aiPct: null };
+    }
+  }, []);
+
+  /* ══════════════════════════════════════════════════════════
+     handleAiScan — FILL IN YOUR BACKEND LOGIC HERE
+     ─────────────────────────────────────────────────────────
+     Receives : text (string) — text to analyse
+     Returns  : Promise<number>  — AI probability score 0-100
+                OR Promise<{ score, breakdown:{ perplexity, burstiness, patternMatch } }>
+  ══════════════════════════════════════════════════════════ */
+const handleAiScan = useCallback(async (text) => {
+    try {
+      const response = await fetch("/api/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      const data = await response.json();
+      return {
+        score: data.score ?? 50,
+        breakdown: {
+          perplexity:   data.breakdown?.perplexity   ?? 50,
+          burstiness:   data.breakdown?.burstiness   ?? 50,
+          patternMatch: data.breakdown?.patternMatch  ?? 50
+        }
+      };
+    } catch (err) {
+      console.error("Detect error:", err);
+      return { score: 50, breakdown: { perplexity: 50, burstiness: 50, patternMatch: 50 } };
+    }
+  }, []);
+
+  /* Humanize trigger */
+  const triggerHumanize = useCallback(async () => {
+    if (!canHumanize) { if(usesLeft<=0) setShowModal(true); return; }
+    setProcessing(true);
+    setOutputAiPct(null);
+    setActiveTab("input");
+    if (laserRef.current) {
+      laserRef.current.classList.remove("go");
+      void laserRef.current.offsetWidth;
+      laserRef.current.classList.add("go");
+    }
+    try {
+      const result = await Promise.resolve(handleTransform(inputText, level));
+      let out = inputText, pct = null;
+      if (typeof result==="string") out = result;
+      else if (result && typeof result==="object") { out = result.text??inputText; pct = result.aiPct??null; }
+      setTimeout(()=>{
+        setOutputText(out);
+        setOutputAiPct(pct);   // ← AI % bar in editor
+        setActiveTab("output");
+        setProcessing(false);
+        // Increment in DB
+        if (user.email) {
+          fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, action: 'increment' })
+          }).then(r=>r.json()).then(data=>{
+            if (data.error === 'limit_reached') { setShowModal(true); }
+          }).catch(()=>{});
+        }
+        setUsedCount(c=>c+1);
+        setUsesLeft(prev=>{ const n=prev-1; if(n<=0) setTimeout(()=>setShowModal(true),500); return n; });
+      },1900);
+    } catch(e){ console.error(e); setProcessing(false); }
+  },[canHumanize,usesLeft,inputText,level,handleTransform]);
+
+  /* AI scan trigger (right panel) */
+  const triggerAiScan = useCallback(async ()=>{
+    const target=outputText||inputText;
+    if (!target.trim()||scanning) return;
+    setScanning(true); setAiScore(null);
+    try {
+      const result = await Promise.resolve(handleAiScan(target));
+      setTimeout(()=>{ setAiScore(typeof result==="number"?result:null); setScanning(false); },1200);
+    } catch(e){ console.error(e); setScanning(false); }
+  },[outputText,inputText,scanning,handleAiScan]);
+
+  const handleCopy = useCallback(()=>{
+    if(!outputText) return;
+    navigator.clipboard?.writeText(outputText);
+    setCopyToast(true); setTimeout(()=>setCopyToast(false),2000);
+  },[outputText]);
+
+  /* ── Stripe upgrade handler ─────────────────────────────────
+     Redirects the user to the Stripe Checkout page for
+     product prod_UOxAmWMZGK8Gz0 (Humanizer Gold, €19.99/mo).
+     If you are using Stripe.js instead of a Payment Link,
+     replace the window.location line with:
+       stripe.redirectToCheckout({ lineItems:[{ price:"price_xxx", quantity:1 }], mode:"subscription", ... })
+  ─────────────────────────────────────────────────────────── */
+  const handleUpgrade = useCallback(()=>{
+    setShowModal(false);
+    window.location.href = STRIPE_CHECKOUT_URL;
+  },[]);
+
+  /* Onboarding complete */
+  const handleOnboardComplete = async (profile) => {
+    const userData = { firstName:profile.firstName, lastName:profile.lastName, email:profile.email, useCase:profile.useCase, plan:'free' };
+    // Save locally immediately so next refresh skips onboarding
+    try {
+      localStorage.setItem('aurum_email', profile.email.toLowerCase());
+      localStorage.setItem('aurum_user_data', JSON.stringify(userData));
+    } catch(e){}
+    setUser(userData);
+    setOnboarded(true);
+    // Then register in DB in background
+    try {
+      const resp = await fetch('/api/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: profile.email, firstName: profile.firstName, lastName: profile.lastName, action: 'register' })
+      });
+      const data = await resp.json();
+      const plan = data.plan || 'free';
+      const usesCount = data.uses_count || 0;
+      const usesRemaining = plan === 'gold' ? 999 : Math.max(0, FREE_USES - usesCount);
+      const updatedUser = { ...userData, plan };
+      setUser(updatedUser);
+      setUsesLeft(usesRemaining);
+      setUsedCount(usesCount);
+      try { localStorage.setItem('aurum_user_data', JSON.stringify(updatedUser)); } catch(e){}
+    } catch(e) {}
+  };
+
+  const NAV = [
+    {id:"humanizer",icon:"✎",label:"Humanizer",    sec:"Tools"},
+    {id:"detector", icon:"◎",label:"AI Detector",  sec:"Tools"},
+    {id:"account",  icon:"◈",label:"Account",      sec:"Account"},
+    {id:"plans",    icon:"◇",label:"Plans & Pricing",sec:"Account"},
+  ];
+
+  const TITLES = {
+    humanizer:{ h1:"Humanizer",      sub:"Paste your AI-generated text below and humanize it." },
+    detector: { h1:"AI Detector",    sub:"Paste any text to receive an AI probability score and breakdown." },
+    account:  { h1:"Account",        sub:"Manage your profile, security settings and usage." },
+    plans:    { h1:"Plans & Pricing",sub:"Choose the plan that fits your workflow." },
+  };
+
+  const initials = (user.firstName?.[0]||"G")+(user.lastName?.[0]||"");
+  const pt = TITLES[view];
+
+  /* AI pct bar color */
+  const pctColor = outputAiPct==null?"var(--muted)":outputAiPct<40?"var(--ok)":outputAiPct<70?"var(--warn)":"var(--bad)";
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="H">
+
+        {/* ── ONBOARDING ── */}
+        {dbLoading && (
+          <div style={{position:'absolute',inset:0,zIndex:300,background:'rgba(12,11,9,0.97)',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12}}>
+            <div style={{textAlign:'center'}}>
+              <div className="H-nav-gem" style={{width:40,height:40,margin:'0 auto 16px',fontSize:18}}>✦</div>
+              <div style={{fontFamily:'var(--ffm)',fontSize:11,color:'var(--gold)',letterSpacing:'.2em',textTransform:'uppercase'}}>Loading your account…</div>
+            </div>
+          </div>
+        )}
+        {!dbLoading && !onboarded && <Onboarding onComplete={handleOnboardComplete}/>}
+
+        {/* ── LEFT NAV ── */}
+        <nav className="H-nav">
+          <div className="H-nav-logo">
+            <div className="H-nav-gem">✦</div>
+            <div className="H-nav-brand">Aurum AI<span>Linguistic Suite</span></div>
+          </div>
+          {["Tools","Account"].map(sec=>(
+            <div key={sec}>
+              <div className="H-nav-sec">{sec}</div>
+              {NAV.filter(n=>n.sec===sec).map(n=>(
+                <button key={n.id} className={`H-nav-item${view===n.id?" active":""}`} onClick={()=>setView(n.id)}>
+                  <span className="H-nav-icon">{n.icon}</span>{n.label}
+                </button>
+              ))}
+            </div>
+          ))}
+          <div className="H-nav-footer">
+            <div className="H-avatar-pill" onClick={()=>setView("account")}>
+              <div className="H-avatar">{initials||"?"}</div>
+              <div className="H-avatar-info">
+                <div className="H-avatar-name">{user.firstName||"Guest"} {user.lastName}</div>
+                <div className="H-avatar-tier">{user.plan==='gold'?'Gold Plan ✦':'Free Plan'}</div>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* ── MAIN ── */}
+        <main className="H-main">
+          <div className="H-topbar">
+            <div className="H-breadcrumb">Dashboard <span style={{color:"var(--muted)"}}>›</span> <em>{pt.h1}</em></div>
+            {view==="humanizer"&&<div className={`H-uses-badge${badgeClass?" "+badgeClass:""}`}>{usesLeft}/{FREE_USES} uses left</div>}
+          </div>
+
+          <div className="H-page-head">
+            <h1>{pt.h1}</h1>
+            <p>{pt.sub}</p>
+          </div>
+
+          {/* ── HUMANIZER ── */}
+          {view==="humanizer"&&<>
+            <div className="H-level-row">
+              <span className="H-level-label">Level</span>
+              <div className="H-level-pills">
+                {Array.from({length:10},(_,i)=>i+1).map(n=>(
+                  <button key={n} className={`H-level-pill${level===n?" active":""}`} onClick={()=>setLevel(n)}>{n}</button>
+                ))}
+              </div>
+              <span className="H-level-desc">{LEVEL_DESCS[level]}</span>
+            </div>
+
+            <div className="H-editor-card">
+              <div ref={laserRef} className="H-laser"/>
+              <div className="H-tabs">
+                <button className={`H-tab${activeTab==="input"?" active":""}`} onClick={()=>setActiveTab("input")}>Input</button>
+                <button className={`H-tab${activeTab==="output"?" active":""}`} onClick={()=>setActiveTab("output")}>
+                  Output{outputText&&<span style={{marginLeft:4,fontSize:8,color:"var(--gold)",opacity:.7}}>●</span>}
+                </button>
+              </div>
+              <div className="H-editor-body">
+                {activeTab==="input"?(
+                  <textarea className="H-textarea" value={inputText} onChange={e=>setInputText(e.target.value)}
+                    placeholder="Paste your AI-generated text here…"/>
+                ):(
+                  outputText?(
+                    <div className="H-output-scroll">
+                      <div className="H-output-text">{outputText}</div>
+                      {copyToast&&<div className="copy-toast">Copied!</div>}
+                    </div>
+                  ):(
+                    <div className="H-output-empty">
+                      <div className="H-output-empty-inner">
+                        <div className="H-output-empty-icon">✦</div>
+                        <div className="H-output-empty-text">Your humanized text will appear here.<br/>Enter text and press <em>Humanize</em>.</div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* ── FOOTER — fully visible, grid layout ── */}
+              <div className="H-editor-footer">
+                <div className="H-footer-stats">
+                  <div className={`H-stat${overLimit?" over":""}`}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
+                    {wordCount}/{WORD_LIMIT} words
+                  </div>
+                  <div className="H-stat">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2 2"/></svg>
+                    {usesLeft}/{FREE_USES} left
+                  </div>
+                </div>
+                <div className="H-footer-btns">
+                  {outputText&&activeTab==="output"&&<button className="btn-ghost" onClick={handleCopy}>Copy</button>}
+                  <button className="btn-ghost" onClick={()=>{setInputText("");setOutputText("");setAiScore(null);setOutputAiPct(null);setActiveTab("input");}}>Clear</button>
+                  <button className={`btn-humanize${processing?" busy":""}`} onClick={triggerHumanize} disabled={!canHumanize}>
+                    {processing?"Processing…":"✦ Humanize"}
+                  </button>
+                </div>
+              </div>
+              {overLimit&&!isGold&&<div className="H-limit-strip">300-word limit for free plan · upgrade to Gold for unlimited length</div>}
+            </div>
+
+            {/* AI Percentage bar — always show after humanize, 0% if humanized by app */}
+            {outputText&&(
+              <div className="H-ai-pct-bar">
+                <span className="H-ai-pct-label">AI Content</span>
+                <div className="H-ai-pct-track">
+                  <div className="H-ai-pct-fill" style={{width:`${outputAiPct??0}%`,background:pctColor}}/>
+                </div>
+                <span className="H-ai-pct-val" style={{color:pctColor}}>{outputAiPct??0}%</span>
+              </div>
+            )}
+
+            <button className="H-adv-btn">⚙ Advanced Settings ▾</button>
+          </>}
+
+          {view==="detector" && <DetectorPage handleAiScan={handleAiScan}/>}
+          {view==="account"  && <AccountPage  user={user} usedCount={usedCount}/>}
+          {view==="plans"    && <PlansPage    onUpgrade={handleUpgrade}/>}
+        </main>
+
+        {/* ── RIGHT PANEL (Humanizer only) ── */}
+        {view==="humanizer"&&(
+          <aside className="H-right">
+            <div className="H-rs">
+              <div className="H-rl">Scan for AI</div>
+              <div className="H-score-wrap">
+                <ScoreRing score={aiScore}/>
+                {aiScore==null
+                  ?<div className="H-score-hint">No score yet.<br/>Click below to scan.</div>
+                  :<div className="H-score-status" style={{color:scoreColor}}>
+                     {aiScore<40?"Looks Human":aiScore<70?"Partially AI":"Detected as AI"}
+                   </div>
+                }
+                <button className="btn-scan" onClick={triggerAiScan} disabled={scanning||(!inputText.trim()&&!outputText.trim())}>
+                  {scanning?"Scanning…":"Check for AI"}
+                </button>
+              </div>
+            </div>
+
+            <div className="H-rs">
+              <div className="H-rl">My Plan</div>
+              <div className="H-plan-card">
+                <div><div className="H-pc-name">Free Plan</div><div className="H-pc-tier">{usesLeft} uses remain</div></div>
+                <div className="H-pc-row"><span className="H-pc-lbl">Used today</span><span className="H-pc-val">{FREE_USES-usesLeft}/{FREE_USES}</span></div>
+                <div className="H-pc-track"><div className="H-pc-fill" style={{width:`${usagePct}%`}}/></div>
+                <button className="btn-upgrade-sm" onClick={handleUpgrade}>Upgrade to Gold</button>
+              </div>
+            </div>
+
+            <div className="H-rs">
+              <div className="H-rl">Text Metrics</div>
+              <MetricBar name="Entropy"    value={metrics.entropy}    color="var(--gold)"/>
+              <MetricBar name="Fluency"    value={metrics.fluency}    color="var(--ok)"/>
+              <MetricBar name="Burstiness" value={metrics.burstiness} color="var(--warn)"/>
+            </div>
+          </aside>
+        )}
+
+        {/* ── MOBILE NAV ── */}
+        <nav className="H-mobile-nav">
+          {[
+            {id:"humanizer",icon:"✎",label:"Humanize"},
+            {id:"detector", icon:"◎",label:"Detector"},
+            {id:"account",  icon:"◈",label:"Account"},
+            {id:"plans",    icon:"◇",label:"Plans"},
+          ].map(n=>(
+            <button key={n.id} className={`H-mobile-nav-item${view===n.id?" active":""}`} onClick={()=>setView(n.id)}>
+              <span className="H-mobile-nav-icon">{n.icon}</span>
+              <span className="H-mobile-nav-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* ── GOLD MODAL ── */}
+        {showModal&&(
+          <GoldModal onDismiss={()=>setShowModal(false)} onUpgrade={handleUpgrade}/>
+        )}
+      </div>
+    </>
+  );
+}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(HumanizerDashboard));
+  </script>
+</body>
+</html>
