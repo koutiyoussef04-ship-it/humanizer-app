@@ -1,0 +1,96 @@
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const { email, firstName, lastName, action } = req.method === 'GET'
+    ? req.query
+    : req.body;
+
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const FREE_LIMIT   = 10;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`
+  };
+
+  async function getUser(email) {
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
+      { headers }
+    );
+    const users = await resp.json();
+    return users[0] || null;
+  }
+
+  function shouldResetUses(user) {
+    if (!user.updated_at) return false;
+    const lastUpdate = new Date(user.updated_at);
+    const now = new Date();
+    return lastUpdate.getMonth() !== now.getMonth() ||
+           lastUpdate.getFullYear() !== now.getFullYear();
+  }
+
+  if (req.method === 'GET') {
+    const user = await getUser(email);
+    if (!user) return res.status(200).json({ exists: false });
+    if (user.plan !== 'gold' && shouldResetUses(user)) {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ uses_count: 0, updated_at: new Date().toISOString() })
+        }
+      );
+      user.uses_count = 0;
+    }
+    return res.status(200).json({ exists: true, ...user });
+  }
+
+  if (req.method === 'POST') {
+    if (action === 'register') {
+      await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'resolution=ignore-duplicates' },
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          first_name: firstName || '',
+          last_name: lastName || '',
+          plan: 'free',
+          uses_count: 0,
+          updated_at: new Date().toISOString()
+        })
+      });
+      const user = await getUser(email);
+      return res.status(200).json({ exists: true, ...(user || {}) });
+    }
+
+    if (action === 'increment') {
+      const user = await getUser(email);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      let usesCount = user.uses_count || 0;
+      if (user.plan !== 'gold' && shouldResetUses(user)) usesCount = 0;
+      if (user.plan !== 'gold' && usesCount >= FREE_LIMIT) {
+        return res.status(403).json({ error: 'limit_reached', plan: user.plan });
+      }
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ uses_count: usesCount + 1, updated_at: new Date().toISOString() })
+        }
+      );
+      return res.status(200).json({ uses_count: usesCount + 1, plan: user.plan });
+    }
+  }
+
+  res.status(400).json({ error: 'Invalid request' });
+}
